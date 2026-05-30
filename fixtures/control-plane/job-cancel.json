@@ -1,0 +1,9 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.cancel",
+  "payload": {
+    "lease_id": "lease_fixture_001",
+    "job_id": "job_fixture_echo_001",
+    "reason": "operator_requested"
+  }
+}

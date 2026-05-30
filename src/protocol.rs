@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 pub const PROTOCOL_VERSION: &str = "remote.v1alpha1";
+pub const USAGE_SCHEMA_VERSION: &str = "remote_usage_report.v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProtocolEnvelope<T> {
@@ -18,6 +19,157 @@ impl<T> ProtocolEnvelope<T> {
             payload,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RegistrationRequest {
+    pub runner_id: Option<String>,
+    pub display_name: String,
+    pub requested_working_groups: Vec<String>,
+    pub registration_token_env: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum RunnerHealth {
+    Online,
+    Degraded,
+    Draining,
+    Offline,
+    Disabled,
+    Quarantined,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Heartbeat {
+    pub runner_id: String,
+    pub capability_inventory_version: String,
+    pub daemon_version: String,
+    pub health: RunnerHealth,
+    pub active_job_ids: Vec<String>,
+    pub available_concurrency: u16,
+    pub clock_skew_ms: i64,
+    pub resource_pressure: Vec<String>,
+    pub last_error_category: Option<ErrorCategory>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkspacePolicy {
+    pub workspace_id: String,
+    pub root_strategy: String,
+    pub allowed_env: Vec<String>,
+    pub scoped_credential_ref: Option<String>,
+    pub artifact_path_allowlist: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct NetworkPolicy {
+    pub mode: String,
+    pub allowed_targets: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PolicySnapshot {
+    pub policy_version: String,
+    pub working_group_id: String,
+    pub allowed_capabilities: Vec<String>,
+    pub risky_actions: Vec<String>,
+    pub workspace: WorkspacePolicy,
+    pub network: NetworkPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AdapterKind {
+    Noop,
+    Echo,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JobDispatch {
+    pub lease_id: String,
+    pub job_id: String,
+    pub runner_id: String,
+    pub correlation_id: String,
+    pub idempotency_key: String,
+    pub adapter: AdapterKind,
+    pub input: serde_json::Value,
+    pub timeout_seconds: u64,
+    pub policy: PolicySnapshot,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct JobLeaseAcceptance {
+    pub lease_id: String,
+    pub job_id: String,
+    pub runner_id: String,
+    pub accepted: bool,
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct CancellationRequest {
+    pub lease_id: String,
+    pub job_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProgressUpdate {
+    pub job_id: String,
+    pub runner_id: String,
+    pub sequence: u64,
+    pub phase: String,
+    pub percent: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LogChunk {
+    pub job_id: String,
+    pub runner_id: String,
+    pub sequence: u64,
+    pub stream: String,
+    pub redacted: bool,
+    pub line: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArtifactManifest {
+    pub job_id: String,
+    pub runner_id: String,
+    pub artifacts: Vec<ArtifactDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ArtifactDescriptor {
+    pub path_label: String,
+    pub content_type: String,
+    pub size_bytes: u64,
+    pub checksum_sha256: String,
+    pub retention_policy: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorCategory {
+    PolicyDenied,
+    CapabilityMismatch,
+    WorkspaceSetup,
+    AdapterFailed,
+    Timeout,
+    Cancelled,
+    ArtifactUpload,
+    UsageReport,
+    Internal,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RunnerError {
+    pub job_id: Option<String>,
+    pub runner_id: String,
+    pub category: ErrorCategory,
+    pub retryable: bool,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -55,7 +207,7 @@ mod tests {
     #[test]
     fn serializes_remote_usage_report_contract() {
         let report = UsageReport {
-            schema_version: "remote_usage_report.v1".to_string(),
+            schema_version: USAGE_SCHEMA_VERSION.to_string(),
             job_id: "job_1".to_string(),
             runner_id: "runner_1".to_string(),
             request_id: None,
@@ -74,5 +226,41 @@ mod tests {
         assert_eq!(value["schema_version"], "remote_usage_report.v1");
         assert_eq!(value["status"], "succeeded");
         assert_eq!(value["correlation_id"], json!("corr_1"));
+    }
+
+    #[test]
+    fn deserializes_control_plane_job_dispatch_fixture() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-echo.json");
+        let envelope: ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).expect("fixture should match job dispatch contract");
+
+        assert_eq!(envelope.protocol_version, PROTOCOL_VERSION);
+        assert_eq!(envelope.message_type, "job.dispatch");
+        assert_eq!(envelope.payload.adapter, AdapterKind::Echo);
+        assert_eq!(envelope.payload.policy.network.mode, "deny_all");
+        assert!(
+            envelope
+                .payload
+                .policy
+                .workspace
+                .allowed_env
+                .contains(&"PATH".to_string())
+        );
+    }
+
+    #[test]
+    fn deserializes_cancellation_and_error_taxonomy_fixtures() {
+        let cancel: ProtocolEnvelope<CancellationRequest> =
+            serde_json::from_str(include_str!("../fixtures/control-plane/job-cancel.json"))
+                .expect("cancel fixture should match cancellation contract");
+        let error: ProtocolEnvelope<RunnerError> =
+            serde_json::from_str(include_str!("../fixtures/runner/job-error-timeout.json"))
+                .expect("error fixture should match runner error contract");
+
+        assert_eq!(cancel.message_type, "job.cancel");
+        assert_eq!(cancel.payload.reason, "operator_requested");
+        assert_eq!(error.message_type, "job.error");
+        assert_eq!(error.payload.category, ErrorCategory::Timeout);
+        assert!(error.payload.retryable);
     }
 }

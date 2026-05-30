@@ -1,0 +1,11 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.error",
+  "payload": {
+    "job_id": "job_fixture_echo_001",
+    "runner_id": "local-dev-runner",
+    "category": "timeout",
+    "retryable": true,
+    "message": "job exceeded dispatch timeout before final result"
+  }
+}

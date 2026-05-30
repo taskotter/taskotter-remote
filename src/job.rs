@@ -1,3 +1,4 @@
+use crate::protocol::{AdapterKind, ArtifactDescriptor, ArtifactManifest, JobDispatch, LogChunk};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,8 +21,11 @@ pub enum JobState {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JobLease {
+    pub lease_id: String,
     pub job_id: String,
+    pub runner_id: String,
     pub working_group_id: String,
+    pub correlation_id: String,
     pub timeout_seconds: u64,
     pub allowed_env: Vec<String>,
     pub risky_actions: Vec<String>,
@@ -30,15 +34,26 @@ pub struct JobLease {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct JobOutcome {
     pub job_id: String,
+    pub runner_id: String,
+    pub correlation_id: String,
     pub state: JobState,
     pub exit_code: Option<i32>,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdapterRunOutput {
+    pub outcome: JobOutcome,
+    pub logs: Vec<LogChunk>,
+    pub artifacts: ArtifactManifest,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum JobStateError {
     #[error("invalid job transition from {from:?} to {to:?}")]
     InvalidTransition { from: JobState, to: JobState },
+    #[error("unsupported adapter kind: {0:?}")]
+    UnsupportedAdapter(AdapterKind),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,6 +112,76 @@ fn can_transition(from: JobState, to: JobState) -> bool {
     )
 }
 
+pub fn lease_from_dispatch(dispatch: &JobDispatch) -> JobLease {
+    JobLease {
+        lease_id: dispatch.lease_id.clone(),
+        job_id: dispatch.job_id.clone(),
+        runner_id: dispatch.runner_id.clone(),
+        working_group_id: dispatch.policy.working_group_id.clone(),
+        correlation_id: dispatch.correlation_id.clone(),
+        timeout_seconds: dispatch.timeout_seconds,
+        allowed_env: dispatch.policy.workspace.allowed_env.clone(),
+        risky_actions: dispatch.policy.risky_actions.clone(),
+    }
+}
+
+pub fn run_noop_or_echo(dispatch: &JobDispatch) -> Result<AdapterRunOutput, JobStateError> {
+    let mut lifecycle = JobLifecycle::default();
+    lifecycle.transition(JobState::Heartbeating)?;
+    lifecycle.transition(JobState::Leased)?;
+    lifecycle.transition(JobState::PreparingWorkspace)?;
+    lifecycle.transition(JobState::Running)?;
+
+    let line = match dispatch.adapter {
+        AdapterKind::Noop => "noop adapter completed without side effects".to_string(),
+        AdapterKind::Echo => dispatch
+            .input
+            .get("echo")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("echo adapter completed")
+            .to_string(),
+    };
+
+    lifecycle.transition(JobState::StreamingLogs)?;
+    let logs = vec![LogChunk {
+        job_id: dispatch.job_id.clone(),
+        runner_id: dispatch.runner_id.clone(),
+        sequence: 1,
+        stream: "stdout".to_string(),
+        redacted: false,
+        line,
+    }];
+
+    lifecycle.transition(JobState::UploadingArtifacts)?;
+    let artifacts = ArtifactManifest {
+        job_id: dispatch.job_id.clone(),
+        runner_id: dispatch.runner_id.clone(),
+        artifacts: vec![ArtifactDescriptor {
+            path_label: "stdout.txt".to_string(),
+            content_type: "text/plain".to_string(),
+            size_bytes: logs[0].line.len() as u64,
+            checksum_sha256: "placeholder-not-uploaded".to_string(),
+            retention_policy: "working_group_private".to_string(),
+        }],
+    };
+
+    lifecycle.transition(JobState::ReportingUsage)?;
+    lifecycle.transition(JobState::Succeeded)?;
+
+    Ok(AdapterRunOutput {
+        outcome: JobOutcome {
+            job_id: dispatch.job_id.clone(),
+            runner_id: dispatch.runner_id.clone(),
+            correlation_id: dispatch.correlation_id.clone(),
+            state: lifecycle.state(),
+            exit_code: Some(0),
+            message: "local echo lifecycle completed".to_string(),
+        },
+        logs,
+        artifacts,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +222,24 @@ mod tests {
                 to: JobState::Running,
             }
         );
+    }
+
+    #[test]
+    fn echo_adapter_runs_deterministic_lifecycle_from_dispatch_fixture() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-echo.json");
+        let envelope: crate::protocol::ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).unwrap();
+        let dispatch = envelope.payload;
+
+        let lease = lease_from_dispatch(&dispatch);
+        assert_eq!(lease.allowed_env, vec!["PATH", "TMPDIR"]);
+        assert_eq!(lease.risky_actions, vec!["write_job_workspace"]);
+
+        let output = run_noop_or_echo(&dispatch).expect("echo lifecycle should succeed");
+
+        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.logs[0].sequence, 1);
+        assert_eq!(output.logs[0].line, "hello from fixture");
+        assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
     }
 }
