@@ -1,0 +1,17 @@
+control_plane_url = "https://app.taskotter.example/api/remote"
+runner_id = "local-dev-runner"
+registration_token_env = "TASKOTTER_REMOTE_REGISTRATION_TOKEN"
+credential_placeholder = "runner-scoped-credential-ref"
+labels = ["local", "dev"]
+max_concurrency = 1
+allowed_working_groups = ["wg-dev"]
+env_allowlist = ["PATH", "HOME", "TMPDIR"]
+risky_action_allowlist = ["read_workspace", "write_job_workspace"]
+heartbeat_interval_seconds = 30
+job_timeout_seconds = 1800
+
+[capability_overrides]
+network_zone = "private-local"
+local_llm_endpoints = []
+local_tools = ["git", "cargo"]
+mcp_host_modes = ["stdio"]
