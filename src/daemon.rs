@@ -2,7 +2,7 @@ use crate::{
     capabilities::RunnerCapabilities,
     config::RemoteConfig,
     job::{JobLifecycle, JobOutcome, JobState},
-    protocol::{ProtocolEnvelope, UsageReport},
+    protocol::{ProtocolEnvelope, UsageAttemptStatus, UsageReport},
 };
 use anyhow::Context;
 use std::time::Duration;
@@ -68,11 +68,18 @@ impl RunnerDaemon {
             message: "placeholder runner execution completed".to_string(),
         };
         let usage = UsageReport {
+            schema_version: "remote_usage_report.v1".to_string(),
             job_id,
             runner_id,
+            request_id: None,
+            correlation_id: None,
+            status: UsageAttemptStatus::Succeeded,
             duration_ms: 1,
             cpu_time_ms: None,
             peak_memory_bytes: None,
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            estimated_cost_micro_usd: 0,
         };
 
         let payloads = vec![

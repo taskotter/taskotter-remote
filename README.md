@@ -42,6 +42,16 @@ not final; the current implementation models an outbound persistent connection
 with HTTPS/WebSocket/gRPC-compatible JSON contracts so the control plane can
 align schema names before a concrete transport is selected.
 
+`job.usage.report` uses payload schema `remote_usage_report.v1`, which maps to
+the control-plane `POST /v1/remote/usage-reports` ingestion boundary. Reports
+include `job_id`, `runner_id`, optional `request_id`, optional `correlation_id`,
+`status`, runtime resource fields, token counts, and estimated cost in
+micro-USD. Token and cost values are zero for the current placeholder runner
+because no real provider adapter is executed.
+
+The control-plane generated OpenAPI document is the MVP source of truth for this
+schema until a generated shared schema package exists.
+
 ## MVP Limitations
 
 - Job execution is a placeholder state transition, not process execution.
