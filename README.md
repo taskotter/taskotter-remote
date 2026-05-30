@@ -9,6 +9,10 @@ This repository currently contains the MVP foundation only. It does not collect
 credentials, execute real Codex or Claude Code adapters, host local LLMs, or
 perform production deployment.
 
+Frontend clients never connect directly to this runner. The runner initiates
+outbound control-plane communication, consumes scoped dispatch instructions, and
+only reports execution evidence back to the control plane.
+
 ## Local Development
 
 ```sh
@@ -41,6 +45,21 @@ Payloads are versioned with `protocol_version = "remote.v1alpha1"`. Transport is
 not final; the current implementation models an outbound persistent connection
 with HTTPS/WebSocket/gRPC-compatible JSON contracts so the control plane can
 align schema names before a concrete transport is selected.
+
+The initial fixture set lives under `fixtures/`:
+
+- `fixtures/control-plane/job-dispatch-echo.json` models a policy-scoped control
+  plane dispatch to the echo adapter.
+- `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
+- `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
+  shape reported by the runner.
+
+`cargo run -- run-once --config examples/remote.toml` consumes the bundled echo
+dispatch fixture, applies local config placeholders for workspace, environment,
+credential, and risky-action boundaries, then emits deterministic registration,
+capability, heartbeat, lease acceptance, progress, log, artifact manifest, usage,
+and final-result envelopes. The echo adapter does not execute a shell, inherit
+ambient secrets, or use network egress.
 
 `job.usage.report` uses payload schema `remote_usage_report.v1`, which maps to
 the control-plane `POST /v1/remote/usage-reports` ingestion boundary. Reports
