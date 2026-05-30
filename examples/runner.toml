@@ -1,0 +1,16 @@
+runner_name = "local-dev-runner"
+working_group_id = "00000000-0000-0000-0000-000000000000"
+max_concurrency = 1
+
+[control_plane]
+endpoint = "https://api.taskotter.example"
+registration_token_env = "TASKOTTER_RUNNER_REGISTRATION_TOKEN"
+transport = "grpc_stream"
+
+[capabilities]
+runtimes = ["shell"]
+tools = ["git"]
+mcp_host_modes = ["stdio"]
+local_llm_endpoints = []
+network_zone = "local-dev"
+labels = ["dev", "untrusted-workloads-disabled"]

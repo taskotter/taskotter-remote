@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package taskotter.runner.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message RunnerEnvelope {
+  string protocol_version = 1;
+  string runner_id = 2;
+  uint64 sequence = 3;
+  google.protobuf.Timestamp sent_at = 4;
+  RunnerEvent event = 5;
+}
+
+message RunnerEvent {
+  oneof kind {
+    RunnerStatus status = 1;
+    CapabilityInventory capability_inventory = 2;
+    JobAccepted job_accepted = 3;
+    JobProgress job_progress = 4;
+    JobCompleted job_completed = 5;
+    UsageEvent usage = 6;
+  }
+}
+
+message RunnerStatus {
+  string state = 1;
+  uint32 active_jobs = 2;
+  uint32 max_concurrency = 3;
+  repeated string warnings = 4;
+}
+
+message CapabilityInventory {
+  string os = 1;
+  string arch = 2;
+  repeated string runtimes = 3;
+  repeated string tools = 4;
+  repeated string mcp_host_modes = 5;
+  repeated string local_llm_endpoints = 6;
+  string network_zone = 7;
+  repeated string labels = 8;
+  uint32 max_concurrency = 9;
+}
+
+message PolicyDecisionRef {
+  string decision_id = 1;
+  string issued_at = 2;
+  string expires_at = 3;
+}
+
+message JobAccepted {
+  string job_id = 1;
+  PolicyDecisionRef policy_decision = 2;
+}
+
+message JobProgress {
+  string job_id = 1;
+  string message = 2;
+}
+
+message JobCompleted {
+  string job_id = 1;
+  string outcome = 2;
+  string summary = 3;
+}
+
+message UsageEvent {
+  string usage_event_id = 1;
+  string job_id = 2;
+  string meter = 3;
+  double quantity = 4;
+  string unit = 5;
+}
