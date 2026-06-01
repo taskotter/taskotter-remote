@@ -24,6 +24,8 @@ pub struct RemoteConfig {
     pub job_timeout_seconds: u64,
     #[serde(default)]
     pub capability_overrides: CapabilityOverrides,
+    #[serde(default)]
+    pub feature_flags: RuntimeFeatureFlags,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,6 +37,18 @@ pub struct CapabilityOverrides {
     pub local_tools: Vec<String>,
     #[serde(default)]
     pub mcp_host_modes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RuntimeFeatureFlags {
+    #[serde(default)]
+    pub local_tools_enabled: bool,
+    #[serde(default)]
+    pub local_llm_enabled: bool,
+    #[serde(default)]
+    pub external_agent_adapters_enabled: bool,
+    #[serde(default)]
+    pub computer_use_enabled: bool,
 }
 
 #[derive(Debug, Error)]
@@ -107,6 +121,7 @@ registration_token_env = "TASKOTTER_REMOTE_REGISTRATION_TOKEN"
         assert_eq!(config.heartbeat_interval_seconds, 30);
         assert_eq!(config.job_timeout_seconds, 1800);
         assert!(config.runner_id.is_none());
+        assert_eq!(config.feature_flags, RuntimeFeatureFlags::default());
     }
 
     #[test]
