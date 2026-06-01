@@ -12,7 +12,8 @@
       "fixtures/control-plane/job-dispatch-noop.json",
       "fixtures/control-plane/job-cancel.json",
       "fixtures/runner/job-error-timeout.json",
-      "fixtures/runner/job-error-policy-denied.json"
+      "fixtures/runner/job-error-policy-denied.json",
+      "fixtures/runner/credential-lifecycle-simulator.json"
     ],
     "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json"
   }

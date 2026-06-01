@@ -5,3 +5,4 @@ pub mod daemon;
 pub mod gates;
 pub mod job;
 pub mod protocol;
+pub mod runner_lifecycle;
