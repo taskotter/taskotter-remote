@@ -337,6 +337,7 @@ mod tests {
                     allowed_targets: vec![],
                 },
             },
+            signed_instruction: None,
         }
     }
 
