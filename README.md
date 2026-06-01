@@ -19,6 +19,7 @@ only reports execution evidence back to the control plane.
 cargo fmt --check
 cargo test
 cargo run -- print-capabilities
+cargo run -- diagnostics --config examples/remote.toml
 cargo run -- run-once --config examples/remote.toml
 ```
 
@@ -69,6 +70,15 @@ include `job_id`, `runner_id`, optional `request_id`, optional `correlation_id`,
 `status`, runtime resource fields, token counts, and estimated cost in
 micro-USD. Token and cost values are zero for the current placeholder runner
 because no real provider adapter is executed.
+
+`cargo run -- diagnostics --config examples/remote.toml` prints a redacted
+operator-local diagnostics snapshot for CLI or local support use. The snapshot
+includes the runner protocol version, capability inventory version, last valid
+instruction summary, heartbeat health, and optional quarantine reason. It reports
+the registration token environment variable name but never reads or prints the
+token value, and credential references are rendered as redacted placeholders.
+Non-online state examples live in `fixtures/runner/operator-diagnostics-*.json`
+for `offline`, `degraded`, `draining`, and `quarantined`.
 
 The control-plane generated OpenAPI document is the MVP source of truth for this
 schema until a generated shared schema package exists.

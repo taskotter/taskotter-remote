@@ -1,0 +1,39 @@
+{
+  "schema_version": "runner_operator_diagnostics.v1",
+  "protocol_version": "remote.v1alpha1",
+  "capability_inventory_version": "remote.v1alpha1",
+  "daemon_version": "0.1.0",
+  "runner_id": "local-dev-runner",
+  "control_plane_url": "https://app.taskotter.example/api/remote",
+  "registration_token_env_name": "TASKOTTER_REMOTE_REGISTRATION_TOKEN",
+  "credential_ref": "[REDACTED:credential_ref]",
+  "last_valid_instruction": {
+    "instruction_id": "fixture:control-plane/job-dispatch-echo",
+    "message_type": "job.dispatch",
+    "protocol_version": "remote.v1alpha1"
+  },
+  "heartbeat_state": {
+    "health": "degraded",
+    "active_job_ids": [],
+    "available_concurrency": 1,
+    "resource_pressure": ["local_llm_endpoint_unreachable"],
+    "last_error_category": "workspace_setup",
+    "quarantine_reason": null
+  },
+  "capability_inventory": {
+    "protocol_version": "remote.v1alpha1",
+    "os": "fixture",
+    "architecture": "fixture",
+    "runtimes": [],
+    "local_tools": [],
+    "mcp_host_modes": [],
+    "local_llm_endpoints": [],
+    "external_agent_adapters": [],
+    "allowlisted_command_adapters": [],
+    "network_zone": "private-local",
+    "labels": ["local", "dev"],
+    "max_concurrency": 1,
+    "allowed_working_groups": ["wg-dev"],
+    "high_risk_capabilities": []
+  }
+}
