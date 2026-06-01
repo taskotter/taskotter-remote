@@ -1,5 +1,8 @@
 use crate::{
-    capabilities::RunnerCapabilities,
+    capabilities::{
+        AllowlistedCommandAdapterCapability, ExternalAgentAdapterCapability,
+        LocalLlmEndpointCapability, RunnerCapabilities,
+    },
     config::RuntimeFeatureFlags,
     gates::{CapabilityGateDecision, HighRiskCapability, evaluate_high_risk_capability},
     protocol::{AdapterExecutionMetadata, AdapterKind, JobDispatch, JobLifecyclePhase},
@@ -26,6 +29,11 @@ pub enum AdapterContractError {
         feature_flag: &'static str,
         reason_code: &'static str,
     },
+    #[error("adapter boundary denied for {adapter_kind:?}: {reason_code}")]
+    BoundaryDenied {
+        adapter_kind: AdapterKind,
+        reason_code: &'static str,
+    },
     #[error("malformed adapter result: {0}")]
     MalformedResult(&'static str),
 }
@@ -36,10 +44,7 @@ pub fn plan_adapter_execution(
     flags: &RuntimeFeatureFlags,
 ) -> Result<AdapterExecutionPlan, AdapterContractError> {
     let required_capability = required_capability(dispatch.adapter);
-
-    if !runner_supports_adapter(dispatch.adapter, capabilities) {
-        return Err(AdapterContractError::MissingCapability(dispatch.adapter));
-    }
+    let adapter_id = resolve_adapter_id(dispatch, capabilities)?;
 
     if let Some(capability) = required_capability {
         match evaluate_high_risk_capability(flags, &dispatch.policy, capability) {
@@ -58,8 +63,7 @@ pub fn plan_adapter_execution(
         }
     }
 
-    let adapter_id = adapter_id(dispatch, capabilities)
-        .unwrap_or_else(|| format!("{:?}", dispatch.adapter).to_ascii_lowercase());
+    validate_capability_boundaries(dispatch, &adapter_id, capabilities)?;
 
     Ok(AdapterExecutionPlan {
         adapter_id: adapter_id.clone(),
@@ -116,42 +120,164 @@ fn required_capability(adapter: AdapterKind) -> Option<HighRiskCapability> {
     }
 }
 
-fn runner_supports_adapter(adapter: AdapterKind, capabilities: &RunnerCapabilities) -> bool {
-    match adapter {
-        AdapterKind::Noop | AdapterKind::Echo => true,
-        AdapterKind::OpenAiCompatibleLocalLlm
-        | AdapterKind::OllamaLocalLlm
-        | AdapterKind::SelfHostedLocalLlm => !capabilities.local_llm_endpoints.is_empty(),
-        AdapterKind::CodexAgent | AdapterKind::ClaudeCodeAgent => {
-            !capabilities.external_agent_adapters.is_empty()
-        }
-        AdapterKind::AllowlistedCommand => !capabilities.allowlisted_command_adapters.is_empty(),
-    }
-}
-
-fn adapter_id(dispatch: &JobDispatch, capabilities: &RunnerCapabilities) -> Option<String> {
-    dispatch
+fn resolve_adapter_id(
+    dispatch: &JobDispatch,
+    capabilities: &RunnerCapabilities,
+) -> Result<String, AdapterContractError> {
+    let requested_id = dispatch
         .input
         .get("adapter_id")
         .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
-        .or_else(|| match dispatch.adapter {
-            AdapterKind::OpenAiCompatibleLocalLlm
-            | AdapterKind::OllamaLocalLlm
-            | AdapterKind::SelfHostedLocalLlm => capabilities
-                .local_llm_endpoints
-                .first()
-                .map(|item| item.id.clone()),
-            AdapterKind::CodexAgent | AdapterKind::ClaudeCodeAgent => capabilities
-                .external_agent_adapters
-                .first()
-                .map(|item| item.id.clone()),
-            AdapterKind::AllowlistedCommand => capabilities
-                .allowlisted_command_adapters
-                .first()
-                .map(|item| item.id.clone()),
-            AdapterKind::Noop | AdapterKind::Echo => None,
+        .filter(|value| !value.trim().is_empty());
+
+    match dispatch.adapter {
+        AdapterKind::Noop => Ok("noop".to_string()),
+        AdapterKind::Echo => Ok("echo".to_string()),
+        AdapterKind::OpenAiCompatibleLocalLlm
+        | AdapterKind::OllamaLocalLlm
+        | AdapterKind::SelfHostedLocalLlm => capabilities
+            .local_llm_endpoints
+            .iter()
+            .find(|capability| Some(capability.id.as_str()) == requested_id)
+            .map(|capability| capability.id.clone())
+            .ok_or(AdapterContractError::MissingCapability(dispatch.adapter)),
+        AdapterKind::CodexAgent | AdapterKind::ClaudeCodeAgent => capabilities
+            .external_agent_adapters
+            .iter()
+            .find(|capability| Some(capability.id.as_str()) == requested_id)
+            .map(|capability| capability.id.clone())
+            .ok_or(AdapterContractError::MissingCapability(dispatch.adapter)),
+        AdapterKind::AllowlistedCommand => capabilities
+            .allowlisted_command_adapters
+            .iter()
+            .find(|capability| Some(capability.id.as_str()) == requested_id)
+            .map(|capability| capability.id.clone())
+            .ok_or(AdapterContractError::MissingCapability(dispatch.adapter)),
+    }
+}
+
+fn validate_capability_boundaries(
+    dispatch: &JobDispatch,
+    adapter_id: &str,
+    capabilities: &RunnerCapabilities,
+) -> Result<(), AdapterContractError> {
+    match dispatch.adapter {
+        AdapterKind::Noop | AdapterKind::Echo => Ok(()),
+        AdapterKind::OpenAiCompatibleLocalLlm
+        | AdapterKind::OllamaLocalLlm
+        | AdapterKind::SelfHostedLocalLlm => {
+            let _capability = local_llm_capability(adapter_id, capabilities, dispatch.adapter)?;
+            Ok(())
+        }
+        AdapterKind::CodexAgent | AdapterKind::ClaudeCodeAgent => {
+            let capability = external_agent_capability(adapter_id, capabilities, dispatch.adapter)?;
+            require_contains(
+                &capability.supported_isolation_modes,
+                &dispatch.policy.workspace.root_strategy,
+                dispatch.adapter,
+                "unsupported_isolation_mode",
+            )?;
+            require_contains(
+                &capability.supported_network_modes,
+                &dispatch.policy.network.mode,
+                dispatch.adapter,
+                "unsupported_network_mode",
+            )
+        }
+        AdapterKind::AllowlistedCommand => {
+            let capability =
+                allowlisted_command_capability(adapter_id, capabilities, dispatch.adapter)?;
+            for arg in requested_args(dispatch)? {
+                require_contains(
+                    &capability.allowed_args,
+                    &arg,
+                    dispatch.adapter,
+                    "command_arg_not_allowlisted",
+                )?;
+            }
+            for env_name in &dispatch.policy.workspace.allowed_env {
+                require_contains(
+                    &capability.allowed_env,
+                    env_name,
+                    dispatch.adapter,
+                    "env_not_allowlisted",
+                )?;
+            }
+            Ok(())
+        }
+    }
+}
+
+fn local_llm_capability<'a>(
+    adapter_id: &str,
+    capabilities: &'a RunnerCapabilities,
+    adapter_kind: AdapterKind,
+) -> Result<&'a LocalLlmEndpointCapability, AdapterContractError> {
+    capabilities
+        .local_llm_endpoints
+        .iter()
+        .find(|capability| capability.id == adapter_id)
+        .ok_or(AdapterContractError::MissingCapability(adapter_kind))
+}
+
+fn external_agent_capability<'a>(
+    adapter_id: &str,
+    capabilities: &'a RunnerCapabilities,
+    adapter_kind: AdapterKind,
+) -> Result<&'a ExternalAgentAdapterCapability, AdapterContractError> {
+    capabilities
+        .external_agent_adapters
+        .iter()
+        .find(|capability| capability.id == adapter_id)
+        .ok_or(AdapterContractError::MissingCapability(adapter_kind))
+}
+
+fn allowlisted_command_capability<'a>(
+    adapter_id: &str,
+    capabilities: &'a RunnerCapabilities,
+    adapter_kind: AdapterKind,
+) -> Result<&'a AllowlistedCommandAdapterCapability, AdapterContractError> {
+    capabilities
+        .allowlisted_command_adapters
+        .iter()
+        .find(|capability| capability.id == adapter_id)
+        .ok_or(AdapterContractError::MissingCapability(adapter_kind))
+}
+
+fn requested_args(dispatch: &JobDispatch) -> Result<Vec<String>, AdapterContractError> {
+    match dispatch.input.get("args") {
+        None => Ok(vec![]),
+        Some(value) => value
+            .as_array()
+            .ok_or(AdapterContractError::MalformedResult(
+                "allowlisted command args must be an array of strings",
+            ))?
+            .iter()
+            .map(|arg| {
+                arg.as_str()
+                    .map(str::to_string)
+                    .ok_or(AdapterContractError::MalformedResult(
+                        "allowlisted command args must be an array of strings",
+                    ))
+            })
+            .collect(),
+    }
+}
+
+fn require_contains(
+    allowed: &[String],
+    requested: &str,
+    adapter_kind: AdapterKind,
+    reason_code: &'static str,
+) -> Result<(), AdapterContractError> {
+    if allowed.iter().any(|value| value == requested) {
+        Ok(())
+    } else {
+        Err(AdapterContractError::BoundaryDenied {
+            adapter_kind,
+            reason_code,
         })
+    }
 }
 
 #[cfg(test)]
@@ -170,6 +296,18 @@ mod tests {
     use super::*;
 
     fn dispatch(adapter: AdapterKind, allowed_capabilities: Vec<&str>) -> JobDispatch {
+        dispatch_with_input(
+            adapter,
+            allowed_capabilities,
+            json!({ "adapter_id": "ollama-dev" }),
+        )
+    }
+
+    fn dispatch_with_input(
+        adapter: AdapterKind,
+        allowed_capabilities: Vec<&str>,
+        input: serde_json::Value,
+    ) -> JobDispatch {
         JobDispatch {
             lease_id: "lease_runtime_001".to_string(),
             job_id: "job_runtime_001".to_string(),
@@ -177,7 +315,7 @@ mod tests {
             correlation_id: "corr_runtime_001".to_string(),
             idempotency_key: "idem_runtime_001".to_string(),
             adapter,
-            input: json!({ "adapter_id": "adapter-fixture-001" }),
+            input,
             timeout_seconds: 60,
             policy: PolicySnapshot {
                 policy_version: "policy_fixture_v1".to_string(),
@@ -249,9 +387,10 @@ mod tests {
     #[test]
     fn denies_external_agent_before_dispatch_when_feature_flag_is_disabled() {
         let error = plan_adapter_execution(
-            &dispatch(
+            &dispatch_with_input(
                 AdapterKind::CodexAgent,
                 vec!["remote.external_agent_runtime_adapter"],
+                json!({ "adapter_id": "codex-local" }),
             ),
             &capabilities(),
             &RuntimeFeatureFlags::default(),
@@ -293,6 +432,129 @@ mod tests {
         assert_eq!(
             plan.metadata.scoped_credential_refs,
             vec!["credential-ref-only"]
+        );
+    }
+
+    #[test]
+    fn rejects_bogus_adapter_id_before_dispatch() {
+        let flags = RuntimeFeatureFlags {
+            local_llm_enabled: true,
+            ..RuntimeFeatureFlags::default()
+        };
+        let error = plan_adapter_execution(
+            &dispatch_with_input(
+                AdapterKind::OllamaLocalLlm,
+                vec!["remote.local_llm_exposure"],
+                json!({ "adapter_id": "missing-local-endpoint" }),
+            ),
+            &capabilities(),
+            &flags,
+        )
+        .expect_err("bogus adapter_id must not plan");
+
+        assert_eq!(
+            error,
+            AdapterContractError::MissingCapability(AdapterKind::OllamaLocalLlm)
+        );
+    }
+
+    #[test]
+    fn rejects_wrong_kind_adapter_id_before_dispatch() {
+        let flags = RuntimeFeatureFlags {
+            external_agent_adapters_enabled: true,
+            ..RuntimeFeatureFlags::default()
+        };
+        let error = plan_adapter_execution(
+            &dispatch_with_input(
+                AdapterKind::CodexAgent,
+                vec!["remote.external_agent_runtime_adapter"],
+                json!({ "adapter_id": "ollama-dev" }),
+            ),
+            &capabilities(),
+            &flags,
+        )
+        .expect_err("local llm adapter id must not resolve for codex adapter");
+
+        assert_eq!(
+            error,
+            AdapterContractError::MissingCapability(AdapterKind::CodexAgent)
+        );
+    }
+
+    #[test]
+    fn rejects_external_agent_unsupported_isolation_and_network_modes() {
+        let flags = RuntimeFeatureFlags {
+            external_agent_adapters_enabled: true,
+            ..RuntimeFeatureFlags::default()
+        };
+        let mut dispatch = dispatch_with_input(
+            AdapterKind::CodexAgent,
+            vec!["remote.external_agent_runtime_adapter"],
+            json!({ "adapter_id": "codex-local" }),
+        );
+        dispatch.policy.workspace.root_strategy = "host_workspace".to_string();
+
+        let error = plan_adapter_execution(&dispatch, &capabilities(), &flags)
+            .expect_err("unsupported isolation mode must be denied");
+        assert_eq!(
+            error,
+            AdapterContractError::BoundaryDenied {
+                adapter_kind: AdapterKind::CodexAgent,
+                reason_code: "unsupported_isolation_mode",
+            }
+        );
+
+        dispatch.policy.workspace.root_strategy = "temporary_isolated".to_string();
+        dispatch.policy.network.mode = "public_internet".to_string();
+        let error = plan_adapter_execution(&dispatch, &capabilities(), &flags)
+            .expect_err("unsupported network mode must be denied");
+        assert_eq!(
+            error,
+            AdapterContractError::BoundaryDenied {
+                adapter_kind: AdapterKind::CodexAgent,
+                reason_code: "unsupported_network_mode",
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_allowlisted_command_unapproved_args_and_env() {
+        let flags = RuntimeFeatureFlags {
+            local_tools_enabled: true,
+            ..RuntimeFeatureFlags::default()
+        };
+        let mut dispatch = dispatch_with_input(
+            AdapterKind::AllowlistedCommand,
+            vec!["remote.local_tool_execution"],
+            json!({
+                "adapter_id": "cargo-test",
+                "args": ["run"]
+            }),
+        );
+
+        let error = plan_adapter_execution(&dispatch, &capabilities(), &flags)
+            .expect_err("unapproved command arg must be denied");
+        assert_eq!(
+            error,
+            AdapterContractError::BoundaryDenied {
+                adapter_kind: AdapterKind::AllowlistedCommand,
+                reason_code: "command_arg_not_allowlisted",
+            }
+        );
+
+        dispatch.input = json!({
+            "adapter_id": "cargo-test",
+            "args": ["test"]
+        });
+        dispatch.policy.workspace.allowed_env = vec!["SECRET_TOKEN".to_string()];
+        let error = plan_adapter_execution(&dispatch, &capabilities(), &flags)
+            .expect_err("unapproved env must be denied");
+        assert_eq!(
+            error,
+            AdapterContractError::BoundaryDenied {
+                adapter_kind: AdapterKind::AllowlistedCommand,
+                reason_code: "env_not_allowlisted",
+            }
         );
     }
 
