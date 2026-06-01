@@ -3,8 +3,9 @@ use crate::{
     config::RemoteConfig,
     job::{lease_from_dispatch, run_noop_or_echo},
     protocol::{
-        Heartbeat, JobDispatch, JobLeaseAcceptance, ProgressUpdate, ProtocolEnvelope,
-        RegistrationRequest, RunnerHealth, USAGE_SCHEMA_VERSION, UsageAttemptStatus, UsageReport,
+        AdapterExecutionMetadata, AdapterResult, Heartbeat, JobDispatch, JobLeaseAcceptance,
+        ProgressUpdate, ProtocolEnvelope, RegistrationRequest, RunnerHealth, USAGE_SCHEMA_VERSION,
+        UsageAttemptStatus, UsageReport,
     },
 };
 use anyhow::Context;
@@ -82,6 +83,31 @@ impl RunnerDaemon {
             completion_tokens: 0,
             estimated_cost_micro_usd: 0,
         };
+        let final_result = AdapterResult {
+            job_id: output.outcome.job_id.clone(),
+            runner_id: runner_id.clone(),
+            phase: output.outcome.state,
+            exit_code: output.outcome.exit_code,
+            usage: usage.clone(),
+            artifacts: output.artifacts.artifacts.clone(),
+            audit_metadata: AdapterExecutionMetadata {
+                adapter_id: "echo".to_string(),
+                adapter_kind: dispatch.adapter,
+                isolation_mode: dispatch.policy.workspace.root_strategy.clone(),
+                network_mode: dispatch.policy.network.mode.clone(),
+                scoped_credential_refs: dispatch
+                    .policy
+                    .workspace
+                    .scoped_credential_ref
+                    .clone()
+                    .into_iter()
+                    .collect(),
+                audit_labels: vec![
+                    dispatch.policy.policy_version.clone(),
+                    dispatch.policy.working_group_id.clone(),
+                ],
+            },
+        };
 
         let payloads = vec![
             json_envelope(self.registration_payload())?,
@@ -120,16 +146,10 @@ impl RunnerDaemon {
                     percent: 100,
                 },
             ))?,
-            json_envelope(ProtocolEnvelope::new(
-                "job.log.chunk",
-                output.logs[0].clone(),
-            ))?,
-            json_envelope(ProtocolEnvelope::new(
-                "job.artifact.manifest",
-                output.artifacts,
-            ))?,
+            json_envelope(ProtocolEnvelope::new("job.log", output.logs[0].clone()))?,
+            json_envelope(ProtocolEnvelope::new("job.artifacts", output.artifacts))?,
             json_envelope(ProtocolEnvelope::new("job.usage.report", usage))?,
-            json_envelope(ProtocolEnvelope::new("job.final_result", output.outcome))?,
+            json_envelope(ProtocolEnvelope::new("job.final_result", final_result))?,
         ];
 
         Ok(payloads)
@@ -162,4 +182,64 @@ fn json_envelope<T: serde::Serialize>(
         payload: serde_json::to_value(envelope.payload)
             .context("failed to serialize protocol envelope payload")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        config::RemoteConfig,
+        protocol::{AdapterResult, JobLifecyclePhase},
+    };
+
+    use super::*;
+
+    #[tokio::test]
+    async fn run_once_emits_canonical_job_evidence_events() {
+        let config = RemoteConfig::from_toml_str(
+            r#"
+control_plane_url = "https://taskotter.local"
+runner_id = "local-dev-runner"
+registration_token_env = "TASKOTTER_REMOTE_REGISTRATION_TOKEN"
+allowed_working_groups = ["wg-dev"]
+env_allowlist = ["PATH", "TMPDIR"]
+risky_action_allowlist = ["write_job_workspace"]
+credential_placeholder = "runner-scoped-credential-ref"
+"#,
+        )
+        .expect("config should parse");
+        let daemon = RunnerDaemon::new(config);
+
+        let payloads = daemon
+            .run_once()
+            .await
+            .expect("run-once should emit events");
+        let message_types: Vec<&str> = payloads
+            .iter()
+            .map(|payload| payload.message_type.as_str())
+            .collect();
+
+        assert_eq!(
+            message_types,
+            vec![
+                "runner.registration.request",
+                "runner.capability.snapshot",
+                "runner.heartbeat",
+                "job.lease.accepted",
+                "job.progress",
+                "job.log",
+                "job.artifacts",
+                "job.usage.report",
+                "job.final_result",
+            ]
+        );
+
+        let final_result: AdapterResult =
+            serde_json::from_value(payloads[8].payload.clone()).unwrap();
+        assert_eq!(final_result.phase, JobLifecyclePhase::Completed);
+        assert_eq!(
+            final_result.usage.status,
+            crate::protocol::UsageAttemptStatus::Succeeded
+        );
+        assert_eq!(final_result.audit_metadata.adapter_id, "echo");
+    }
 }

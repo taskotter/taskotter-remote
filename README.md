@@ -76,9 +76,11 @@ The initial fixture set lives under `fixtures/`:
   request/response payloads.
 - `fixtures/runner/noop-lifecycle-*.json` model deterministic no-op success,
   failure, cancellation, and timeout evidence envelopes for log, artifact,
-  usage, and final-result reporting. Successful usage attempts report
-  `job.usage.report.status = "succeeded"`, while the control-plane terminal
-  result reports `job.final_result.state = "completed"`.
+  usage, and final-result reporting using the canonical `job.log`,
+  `job.artifacts`, `job.usage.report`, and `job.final_result` message names.
+  Successful usage attempts report `job.usage.report.status = "succeeded"`,
+  while the control-plane terminal result reports
+  `job.final_result.payload.phase = "completed"` through `AdapterResult`.
 
 `cargo run -- run-once --config examples/remote.toml` consumes the bundled echo
 dispatch fixture, applies local config placeholders for workspace, environment,

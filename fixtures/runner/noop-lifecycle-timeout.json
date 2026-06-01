@@ -1,7 +1,7 @@
 [
   {
     "protocol_version": "remote.v1alpha1",
-    "message_type": "job.log.chunk",
+    "message_type": "job.log",
     "payload": {
       "job_id": "job_fixture_noop_001",
       "runner_id": "local-dev-runner",
@@ -13,7 +13,7 @@
   },
   {
     "protocol_version": "remote.v1alpha1",
-    "message_type": "job.artifact.manifest",
+    "message_type": "job.artifacts",
     "payload": {
       "job_id": "job_fixture_noop_001",
       "runner_id": "local-dev-runner",
@@ -44,10 +44,34 @@
     "payload": {
       "job_id": "job_fixture_noop_001",
       "runner_id": "local-dev-runner",
-      "correlation_id": "corr_fixture_noop_001",
-      "state": "timed_out",
+      "phase": "timed_out",
       "exit_code": null,
-      "message": "local noop lifecycle exceeded dispatch timeout"
+      "usage": {
+        "schema_version": "remote_usage_report.v1",
+        "job_id": "job_fixture_noop_001",
+        "runner_id": "local-dev-runner",
+        "request_id": null,
+        "correlation_id": "corr_fixture_noop_001",
+        "status": "timeout",
+        "duration_ms": 30000,
+        "cpu_time_ms": null,
+        "peak_memory_bytes": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "estimated_cost_micro_usd": 0
+      },
+      "artifacts": [],
+      "audit_metadata": {
+        "adapter_id": "noop",
+        "adapter_kind": "noop",
+        "isolation_mode": "temporary_isolated",
+        "network_mode": "deny_all",
+        "scoped_credential_refs": [],
+        "audit_labels": [
+          "policy_fixture_v1",
+          "wg-dev"
+        ]
+      }
     }
   }
 ]

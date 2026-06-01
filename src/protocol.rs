@@ -332,7 +332,6 @@ pub struct HttpsFallbackEventBatchResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::job::JobOutcome;
     use serde_json::json;
 
     use super::*;
@@ -554,8 +553,8 @@ mod tests {
             assert_eq!(
                 message_types,
                 vec![
-                    "job.log.chunk",
-                    "job.artifact.manifest",
+                    "job.log",
+                    "job.artifacts",
                     "job.usage.report",
                     "job.final_result"
                 ]
@@ -570,15 +569,16 @@ mod tests {
                 .expect("artifact manifest should match contract");
             let usage: UsageReport = serde_json::from_value(envelopes[2].payload.clone())
                 .expect("usage report should match contract");
-            let result: JobOutcome = serde_json::from_value(envelopes[3].payload.clone())
-                .expect("final result should match contract");
+            let result: AdapterResult = serde_json::from_value(envelopes[3].payload.clone())
+                .expect("final result should match adapter result contract");
 
             assert_eq!(log.sequence, 1);
             assert_eq!(artifacts.job_id, "job_fixture_noop_001");
             assert_eq!(usage.schema_version, USAGE_SCHEMA_VERSION);
             assert_eq!(usage.status, expected_status);
-            assert_eq!(result.state, expected_state);
-            assert_eq!(result.correlation_id, "corr_fixture_noop_001");
+            assert_eq!(result.phase, expected_state);
+            assert_eq!(result.usage.status, expected_status);
+            assert_eq!(result.audit_metadata.adapter_kind, AdapterKind::Noop);
         }
     }
 
