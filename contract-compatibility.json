@@ -14,6 +14,12 @@
       "fixtures/runner/job-error-timeout.json",
       "fixtures/runner/job-error-policy-denied.json"
     ],
-    "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json"
+    "additive_tolerance_fixtures": [
+      "fixtures/control-plane/job-dispatch-additive-field.json"
+    ],
+    "negative_cases": {
+      "unsupported_protocol_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json",
+      "missing_fixture_path": "fixtures/control-plane/job-dispatch-missing-required-fixture.json"
+    }
   }
 }
