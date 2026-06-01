@@ -136,35 +136,63 @@ pub fn redact_artifact_descriptor(mut descriptor: ArtifactDescriptor) -> Artifac
 }
 
 fn redact_secret_shaped_values(input: &str) -> (String, bool) {
+    let mut output = String::with_capacity(input.len());
     let mut redacted = false;
-    let tokens = input
-        .split_whitespace()
-        .map(|token| {
-            if is_fake_secret_shaped(token) {
-                redacted = true;
-                "[REDACTED]".to_string()
-            } else {
-                token.to_string()
-            }
-        })
-        .collect::<Vec<_>>();
+    let mut cursor = 0;
 
-    (tokens.join(" "), redacted)
+    while cursor < input.len() {
+        if let Some((start, end)) = find_secret_shaped_substring(&input[cursor..]) {
+            output.push_str(&input[cursor..cursor + start]);
+            output.push_str("[REDACTED]");
+            cursor += end;
+            redacted = true;
+        } else {
+            output.push_str(&input[cursor..]);
+            break;
+        }
+    }
+
+    (output, redacted)
 }
 
-fn is_fake_secret_shaped(token: &str) -> bool {
-    let trimmed = token.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_' && c != '-');
-    let has_enough_secret_chars = trimmed
-        .chars()
-        .filter(|ch| ch.is_ascii_alphanumeric())
-        .count()
-        >= 20;
+fn find_secret_shaped_substring(input: &str) -> Option<(usize, usize)> {
+    for (start, _) in input.char_indices() {
+        if !SECRET_PREFIXES
+            .iter()
+            .any(|prefix| input[start..].starts_with(prefix))
+        {
+            continue;
+        }
 
-    has_enough_secret_chars
-        && (trimmed.starts_with("sk-")
-            || trimmed.starts_with("tok_")
-            || trimmed.starts_with("ghp_")
-            || trimmed.starts_with("secret_"))
+        let end = input[start..]
+            .char_indices()
+            .find_map(|(offset, ch)| {
+                if is_secret_body_char(ch) {
+                    None
+                } else {
+                    Some(start + offset)
+                }
+            })
+            .unwrap_or(input.len());
+        let candidate = &input[start..end];
+        let secret_char_count = candidate
+            .chars()
+            .filter(|ch| ch.is_ascii_alphanumeric())
+            .count();
+
+        if secret_char_count >= MIN_SECRET_ALNUM_CHARS {
+            return Some((start, end));
+        }
+    }
+
+    None
+}
+
+const SECRET_PREFIXES: &[&str] = &["sk-", "tok_", "ghp_", "secret_"];
+const MIN_SECRET_ALNUM_CHARS: usize = 20;
+
+fn is_secret_body_char(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_' || ch == '-'
 }
 
 #[cfg(test)]
@@ -194,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn concurrent_jobs_do_not_share_workspace_artifact_or_credentials() {
+    fn concurrent_jobs_do_not_share_workspace_artifact_or_unique_credential_refs() {
         let first = dispatch("job_one", "workspace_one", Some("cred_one"));
         let second = dispatch("job_two", "workspace_two", Some("cred_two"));
         let first_plan = plan_job_isolation(&first, &[]);
@@ -212,6 +240,8 @@ mod tests {
             first_plan.scoped_credential_ref,
             second_plan.scoped_credential_ref
         );
+        // Dispatcher/control-plane must not reuse scoped credential refs across jobs.
+        // This contract-level regression keeps that upstream invariant explicit.
 
         assert_eq!(
             first_plan.owns(&resource(
@@ -324,8 +354,8 @@ mod tests {
     }
 
     #[test]
-    fn fake_secret_shaped_values_are_redacted_from_logs_and_artifact_labels() {
-        let log = redact_log_chunk(LogChunk {
+    fn fake_secret_shaped_substrings_are_redacted_from_logs_and_artifact_labels() {
+        let bare_log = redact_log_chunk(LogChunk {
             job_id: "job_redact".to_string(),
             runner_id: "runner".to_string(),
             sequence: 1,
@@ -333,17 +363,58 @@ mod tests {
             redacted: false,
             line: "adapter output sk-fake1234567890abcdef leaked".to_string(),
         });
-        let artifact = redact_artifact_descriptor(ArtifactDescriptor {
+        let key_value_log = redact_log_chunk(LogChunk {
+            job_id: "job_redact".to_string(),
+            runner_id: "runner".to_string(),
+            sequence: 2,
+            stream: "stdout".to_string(),
+            redacted: false,
+            line: "OPENAI_API_KEY=sk-fake1234567890abcdef".to_string(),
+        });
+        let json_like_log = redact_log_chunk(LogChunk {
+            job_id: "job_redact".to_string(),
+            runner_id: "runner".to_string(),
+            sequence: 3,
+            stream: "stdout".to_string(),
+            redacted: false,
+            line: r#"{"token":"tok_fake1234567890abcdef"}"#.to_string(),
+        });
+        let label_like_log = redact_log_chunk(LogChunk {
+            job_id: "job_redact".to_string(),
+            runner_id: "runner".to_string(),
+            sequence: 4,
+            stream: "stdout".to_string(),
+            redacted: false,
+            line: "token:ghp_fake1234567890abcdef".to_string(),
+        });
+        let artifact_with_extension = redact_artifact_descriptor(ArtifactDescriptor {
             path_label: "stdout tok_fake1234567890abcdef.txt".to_string(),
             content_type: "text/plain".to_string(),
             size_bytes: 1,
             checksum_sha256: "checksum".to_string(),
             retention_policy: "working_group_private".to_string(),
         });
+        let artifact_with_path_and_extension = redact_artifact_descriptor(ArtifactDescriptor {
+            path_label: "logs/job-redact/sk-fake1234567890abcdef.stderr.log".to_string(),
+            content_type: "text/plain".to_string(),
+            size_bytes: 1,
+            checksum_sha256: "checksum".to_string(),
+            retention_policy: "working_group_private".to_string(),
+        });
 
-        assert!(log.redacted);
-        assert_eq!(log.line, "adapter output [REDACTED] leaked");
-        assert_eq!(artifact.path_label, "stdout [REDACTED]");
+        assert!(bare_log.redacted);
+        assert!(key_value_log.redacted);
+        assert!(json_like_log.redacted);
+        assert!(label_like_log.redacted);
+        assert_eq!(bare_log.line, "adapter output [REDACTED] leaked");
+        assert_eq!(key_value_log.line, "OPENAI_API_KEY=[REDACTED]");
+        assert_eq!(json_like_log.line, r#"{"token":"[REDACTED]"}"#);
+        assert_eq!(label_like_log.line, "token:[REDACTED]");
+        assert_eq!(artifact_with_extension.path_label, "stdout [REDACTED].txt");
+        assert_eq!(
+            artifact_with_path_and_extension.path_label,
+            "logs/job-redact/[REDACTED].stderr.log"
+        );
     }
 
     #[test]
