@@ -35,7 +35,11 @@ pub struct DispatchSigningContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DispatchKeyStatus {
     Active,
-    Retired { verify_until_unix_seconds: u64 },
+    Retired {
+        retired_at_unix_seconds: u64,
+        verify_until_unix_seconds: u64,
+        allowed_clock_skew_seconds: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -158,9 +162,13 @@ pub fn verify_dispatch_instruction(
         .get(&instruction.signature.key_id)
         .ok_or(DispatchVerificationError::UnknownKey)?;
     if let DispatchKeyStatus::Retired {
+        retired_at_unix_seconds,
         verify_until_unix_seconds,
+        allowed_clock_skew_seconds,
     } = key.status
-        && now_unix_seconds > verify_until_unix_seconds
+        && (now_unix_seconds > verify_until_unix_seconds
+            || instruction.signature.signed_at_unix_seconds
+                > retired_at_unix_seconds.saturating_add(allowed_clock_skew_seconds))
     {
         return Err(DispatchVerificationError::KeyRetired);
     }
@@ -179,7 +187,7 @@ pub fn verify_dispatch_instruction(
         .verify(canonical_payload.as_bytes(), &signature)
         .map_err(|_| DispatchVerificationError::InvalidSignature)?;
 
-    let replay_key = replay_key(&instruction.dispatch.payload, &instruction.signature.key_id);
+    let replay_key = replay_key(&instruction.dispatch.payload);
     if replay_cache.has_seen(&replay_key) {
         return Err(DispatchVerificationError::ReplayDetected);
     }
@@ -234,10 +242,10 @@ fn validate_required_dispatch_fields(
     Ok(())
 }
 
-fn replay_key(dispatch: &JobDispatch, key_id: &str) -> String {
+fn replay_key(dispatch: &JobDispatch) -> String {
     format!(
-        "{}:{}:{}:{}",
-        dispatch.runner_id, dispatch.job_id, dispatch.idempotency_key, key_id
+        "{}:{}:{}",
+        dispatch.runner_id, dispatch.job_id, dispatch.idempotency_key
     )
 }
 
@@ -284,7 +292,9 @@ mod tests {
                 key_id: RETIRED_KEY_ID.to_string(),
                 verifying_key: retired_signing_key().verifying_key(),
                 status: DispatchKeyStatus::Retired {
+                    retired_at_unix_seconds: NOW - 120,
                     verify_until_unix_seconds: NOW + 600,
+                    allowed_clock_skew_seconds: 30,
                 },
             },
         ])
@@ -392,6 +402,42 @@ mod tests {
     }
 
     #[test]
+    fn rejects_cross_key_resigned_replay_fixture() {
+        let active_instruction = signed_fixture();
+        let retired_instruction = sign_dispatch_instruction(
+            dispatch_fixture(),
+            &retired_signing_key(),
+            DispatchSigningContext {
+                key_id: RETIRED_KEY_ID.to_string(),
+                signed_at_unix_seconds: NOW - 130,
+                expires_at_unix_seconds: NOW + 60,
+            },
+        )
+        .expect("cross-key replay fixture should sign");
+        let mut replay_cache = InMemoryDispatchReplayCache::default();
+
+        verify_dispatch_instruction(
+            &active_instruction,
+            &registry(),
+            &mut replay_cache,
+            NOW,
+            RUNNER_ID,
+        )
+        .expect("first verification should record dispatch identity");
+
+        assert_eq!(
+            verify_dispatch_instruction(
+                &retired_instruction,
+                &registry(),
+                &mut replay_cache,
+                NOW,
+                RUNNER_ID,
+            ),
+            Err(DispatchVerificationError::ReplayDetected)
+        );
+    }
+
+    #[test]
     fn rejects_wrong_runner_scope_fixture() {
         let instruction = signed_fixture();
         let mut replay_cache = InMemoryDispatchReplayCache::default();
@@ -415,7 +461,7 @@ mod tests {
             &retired_signing_key(),
             DispatchSigningContext {
                 key_id: RETIRED_KEY_ID.to_string(),
-                signed_at_unix_seconds: NOW - 300,
+                signed_at_unix_seconds: NOW - 130,
                 expires_at_unix_seconds: NOW + 60,
             },
         )
@@ -433,7 +479,7 @@ mod tests {
             &retired_signing_key(),
             DispatchSigningContext {
                 key_id: RETIRED_KEY_ID.to_string(),
-                signed_at_unix_seconds: NOW - 300,
+                signed_at_unix_seconds: NOW - 130,
                 expires_at_unix_seconds: NOW + 2_000,
             },
         )
@@ -450,6 +496,50 @@ mod tests {
             ),
             Err(DispatchVerificationError::KeyRetired)
         );
+    }
+
+    #[test]
+    fn rejects_new_signature_after_key_retirement_inside_verify_window() {
+        let instruction = sign_dispatch_instruction(
+            dispatch_fixture(),
+            &retired_signing_key(),
+            DispatchSigningContext {
+                key_id: RETIRED_KEY_ID.to_string(),
+                signed_at_unix_seconds: NOW - 60,
+                expires_at_unix_seconds: NOW + 60,
+            },
+        )
+        .expect("post-retirement signature fixture should sign");
+        let mut replay_cache = InMemoryDispatchReplayCache::default();
+
+        assert_eq!(
+            verify_dispatch_instruction(
+                &instruction,
+                &registry(),
+                &mut replay_cache,
+                NOW,
+                RUNNER_ID,
+            ),
+            Err(DispatchVerificationError::KeyRetired)
+        );
+    }
+
+    #[test]
+    fn allows_retired_key_signature_within_clock_skew() {
+        let instruction = sign_dispatch_instruction(
+            dispatch_fixture(),
+            &retired_signing_key(),
+            DispatchSigningContext {
+                key_id: RETIRED_KEY_ID.to_string(),
+                signed_at_unix_seconds: NOW - 90,
+                expires_at_unix_seconds: NOW + 60,
+            },
+        )
+        .expect("clock-skew fixture should sign");
+        let mut replay_cache = InMemoryDispatchReplayCache::default();
+
+        verify_dispatch_instruction(&instruction, &registry(), &mut replay_cache, NOW, RUNNER_ID)
+            .expect("retired key should allow signatures within configured clock skew");
     }
 
     #[test]

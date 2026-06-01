@@ -38,6 +38,11 @@
       "expected_result": "dispatch_replay_detected"
     },
     {
+      "name": "cross-key-re-sign-replay",
+      "key_id": "fixture-ed25519-previous-2026-05",
+      "expected_result": "dispatch_replay_detected"
+    },
+    {
       "name": "wrong-scope",
       "key_id": "fixture-ed25519-active-2026-06",
       "expected_result": "dispatch_scope_mismatch"
@@ -46,6 +51,11 @@
       "name": "rotated-key",
       "key_id": "fixture-ed25519-previous-2026-05",
       "expected_result": "accepted_inside_rotation_window"
+    },
+    {
+      "name": "retired-key-new-signature",
+      "key_id": "fixture-ed25519-previous-2026-05",
+      "expected_result": "dispatch_signature_key_retired"
     }
   ]
 }
