@@ -1,4 +1,6 @@
-use crate::protocol::{AdapterKind, ArtifactDescriptor, ArtifactManifest, JobDispatch, LogChunk};
+use crate::protocol::{
+    AdapterKind, ArtifactDescriptor, ArtifactManifest, JobDispatch, JobLifecyclePhase, LogChunk,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -36,7 +38,7 @@ pub struct JobOutcome {
     pub job_id: String,
     pub runner_id: String,
     pub correlation_id: String,
-    pub state: JobState,
+    pub state: JobLifecyclePhase,
     pub exit_code: Option<i32>,
     pub message: String,
 }
@@ -46,6 +48,14 @@ pub struct AdapterRunOutput {
     pub outcome: JobOutcome,
     pub logs: Vec<LogChunk>,
     pub artifacts: ArtifactManifest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimulatedTerminalOutcome {
+    Succeeded,
+    Failed,
+    Cancelled,
+    TimedOut,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -161,7 +171,11 @@ pub fn run_noop_or_echo(dispatch: &JobDispatch) -> Result<AdapterRunOutput, JobS
             path_label: "stdout.txt".to_string(),
             content_type: "text/plain".to_string(),
             size_bytes: logs[0].line.len() as u64,
-            checksum_sha256: "placeholder-not-uploaded".to_string(),
+            checksum_sha256: if dispatch.adapter == AdapterKind::Noop {
+                "08d9d37a1d9dbc2108aad0cecc04503b2a6bbd699a266f151f928988af025d5f".to_string()
+            } else {
+                "placeholder-not-uploaded".to_string()
+            },
             retention_policy: "working_group_private".to_string(),
         }],
     };
@@ -174,9 +188,107 @@ pub fn run_noop_or_echo(dispatch: &JobDispatch) -> Result<AdapterRunOutput, JobS
             job_id: dispatch.job_id.clone(),
             runner_id: dispatch.runner_id.clone(),
             correlation_id: dispatch.correlation_id.clone(),
-            state: lifecycle.state(),
+            state: JobLifecyclePhase::Completed,
             exit_code: Some(0),
             message: "local echo lifecycle completed".to_string(),
+        },
+        logs,
+        artifacts,
+    })
+}
+
+pub fn simulate_noop_lifecycle(
+    dispatch: &JobDispatch,
+    terminal: SimulatedTerminalOutcome,
+) -> Result<AdapterRunOutput, JobStateError> {
+    if dispatch.adapter != AdapterKind::Noop {
+        return Err(JobStateError::UnsupportedAdapter(dispatch.adapter));
+    }
+
+    let mut lifecycle = JobLifecycle::default();
+    lifecycle.transition(JobState::Heartbeating)?;
+    lifecycle.transition(JobState::Leased)?;
+    lifecycle.transition(JobState::PreparingWorkspace)?;
+    lifecycle.transition(JobState::Running)?;
+
+    let (final_state, exit_code, message, stream, line) = match terminal {
+        SimulatedTerminalOutcome::Succeeded => (
+            JobLifecyclePhase::Completed,
+            Some(0),
+            "local noop lifecycle completed",
+            "stdout",
+            "noop adapter completed without side effects",
+        ),
+        SimulatedTerminalOutcome::Failed => (
+            JobLifecyclePhase::Failed,
+            Some(1),
+            "local noop lifecycle failed before result upload",
+            "stderr",
+            "noop simulation injected deterministic failure",
+        ),
+        SimulatedTerminalOutcome::Cancelled => (
+            JobLifecyclePhase::Cancelled,
+            None,
+            "local noop lifecycle cancelled by control plane request",
+            "stderr",
+            "noop simulation observed operator_requested cancellation",
+        ),
+        SimulatedTerminalOutcome::TimedOut => (
+            JobLifecyclePhase::TimedOut,
+            None,
+            "local noop lifecycle exceeded dispatch timeout",
+            "stderr",
+            "noop simulation exceeded 30 second timeout",
+        ),
+    };
+
+    match terminal {
+        SimulatedTerminalOutcome::Succeeded => {
+            lifecycle.transition(JobState::StreamingLogs)?;
+            lifecycle.transition(JobState::UploadingArtifacts)?;
+            lifecycle.transition(JobState::ReportingUsage)?;
+            lifecycle.transition(JobState::Succeeded)?;
+        }
+        SimulatedTerminalOutcome::Failed => lifecycle.transition(JobState::Failed)?,
+        SimulatedTerminalOutcome::Cancelled => lifecycle.transition(JobState::Cancelled)?,
+        SimulatedTerminalOutcome::TimedOut => lifecycle.transition(JobState::TimedOut)?,
+    }
+
+    let logs = vec![LogChunk {
+        job_id: dispatch.job_id.clone(),
+        runner_id: dispatch.runner_id.clone(),
+        sequence: 1,
+        stream: stream.to_string(),
+        redacted: false,
+        line: line.to_string(),
+    }];
+
+    let artifacts = ArtifactManifest {
+        job_id: dispatch.job_id.clone(),
+        runner_id: dispatch.runner_id.clone(),
+        artifacts: match terminal {
+            SimulatedTerminalOutcome::Succeeded => vec![ArtifactDescriptor {
+                path_label: "stdout.txt".to_string(),
+                content_type: "text/plain".to_string(),
+                size_bytes: line.len() as u64,
+                checksum_sha256: "08d9d37a1d9dbc2108aad0cecc04503b2a6bbd699a266f151f928988af025d5f"
+                    .to_string(),
+                retention_policy: "working_group_private".to_string(),
+            }],
+            SimulatedTerminalOutcome::Failed
+            | SimulatedTerminalOutcome::Cancelled
+            | SimulatedTerminalOutcome::TimedOut => vec![],
+        },
+    };
+
+    Ok(AdapterRunOutput {
+        outcome: JobOutcome {
+            job_id: dispatch.job_id.clone(),
+            runner_id: dispatch.runner_id.clone(),
+            correlation_id: dispatch.correlation_id.clone(),
+            state: final_state,
+            exit_code,
+            message: message.to_string(),
         },
         logs,
         artifacts,
@@ -238,7 +350,7 @@ mod tests {
 
         let output = run_noop_or_echo(&dispatch).expect("echo lifecycle should succeed");
 
-        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.outcome.state, JobLifecyclePhase::Completed);
         assert_eq!(output.logs[0].sequence, 1);
         assert_eq!(output.logs[0].line, "hello from fixture");
         assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
@@ -257,12 +369,61 @@ mod tests {
 
         let output = run_noop_or_echo(&dispatch).expect("noop lifecycle should succeed");
 
-        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.outcome.state, JobLifecyclePhase::Completed);
         assert_eq!(output.outcome.exit_code, Some(0));
         assert_eq!(
             output.logs[0].line,
             "noop adapter completed without side effects"
         );
         assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
+        assert_eq!(
+            output.artifacts.artifacts[0].checksum_sha256,
+            "08d9d37a1d9dbc2108aad0cecc04503b2a6bbd699a266f151f928988af025d5f"
+        );
+    }
+
+    #[test]
+    fn simulates_noop_terminal_lifecycle_outcomes_deterministically() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-noop.json");
+        let envelope: crate::protocol::ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).unwrap();
+        let dispatch = envelope.payload;
+
+        for (terminal, state, exit_code, stream) in [
+            (
+                SimulatedTerminalOutcome::Succeeded,
+                JobLifecyclePhase::Completed,
+                Some(0),
+                "stdout",
+            ),
+            (
+                SimulatedTerminalOutcome::Failed,
+                JobLifecyclePhase::Failed,
+                Some(1),
+                "stderr",
+            ),
+            (
+                SimulatedTerminalOutcome::Cancelled,
+                JobLifecyclePhase::Cancelled,
+                None,
+                "stderr",
+            ),
+            (
+                SimulatedTerminalOutcome::TimedOut,
+                JobLifecyclePhase::TimedOut,
+                None,
+                "stderr",
+            ),
+        ] {
+            let output =
+                simulate_noop_lifecycle(&dispatch, terminal).expect("simulation should run");
+
+            assert_eq!(output.outcome.state, state);
+            assert_eq!(output.outcome.exit_code, exit_code);
+            assert_eq!(output.logs[0].sequence, 1);
+            assert_eq!(output.logs[0].stream, stream);
+            assert_eq!(output.artifacts.job_id, dispatch.job_id);
+            assert_eq!(output.artifacts.runner_id, dispatch.runner_id);
+        }
     }
 }

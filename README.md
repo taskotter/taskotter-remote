@@ -84,6 +84,13 @@ The initial fixture set lives under `fixtures/`:
   denial error.
 - `fixtures/https-fallback/*.json` models poll and event-batch fallback
   request/response payloads.
+- `fixtures/runner/noop-lifecycle-*.json` model deterministic no-op success,
+  failure, cancellation, and timeout evidence envelopes for log, artifact,
+  usage, and final-result reporting using the canonical `job.log`,
+  `job.artifacts`, `job.usage.report`, and `job.final_result` message names.
+  Successful usage attempts report `job.usage.report.status = "succeeded"`,
+  while the control-plane terminal result reports
+  `job.final_result.payload.phase = "completed"` through `AdapterResult`.
 
 `cargo run -- run-once --config examples/remote.toml` consumes the bundled echo
 dispatch fixture, applies local config placeholders for workspace, environment,
@@ -144,6 +151,11 @@ Adapter results use terminal lifecycle phases compatible with the runner job
 states: `completed`, `failed`, `cancelled`, `timed_out`, and `policy_denied`.
 Local LLM attempts still require `job.usage.report` evidence even when provider
 cost is zero.
+
+The no-op lifecycle fixtures are contract-only simulations. They do not execute
+commands, read ambient credentials, upload artifacts, or perform network I/O.
+They keep runner-local lifecycle success separate from the control-plane
+terminal state and usage-attempt status fields.
 
 ## Compatibility Checks
 
