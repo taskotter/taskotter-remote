@@ -6,14 +6,36 @@
   "remote": {
     "supported_protocol_versions": ["remote.v1alpha1"],
     "usage_schema_versions": ["remote_usage_report.v1"],
+    "https_fallback_schema_versions": ["remote_https_fallback.v1alpha1"],
     "adapter_contract_versions": ["remote_adapter_contract.v1alpha1"],
+    "schemas": [
+      "schemas/runner-protocol.v1alpha1.json",
+      "schemas/https-fallback.v1alpha1.json",
+      "schemas/runner-error-taxonomy.v1alpha1.json"
+    ],
     "fixtures": [
       "fixtures/control-plane/job-dispatch-echo.json",
       "fixtures/control-plane/job-dispatch-noop.json",
       "fixtures/control-plane/job-cancel.json",
+      "fixtures/runner/heartbeat-online.json",
+      "fixtures/runner/job-log-stdout.json",
+      "fixtures/runner/job-artifacts.json",
+      "fixtures/runner/job-usage-succeeded.json",
+      "fixtures/runner/job-final-result-succeeded.json",
       "fixtures/runner/job-error-timeout.json",
-      "fixtures/runner/job-error-policy-denied.json"
+      "fixtures/runner/job-error-policy-denied.json",
+      "fixtures/https-fallback/poll-request.json",
+      "fixtures/https-fallback/poll-response-dispatch.json",
+      "fixtures/https-fallback/event-batch-request.json",
+      "fixtures/https-fallback/event-batch-response.json"
     ],
-    "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json"
+    "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json",
+    "consumer_followups": [
+      {
+        "repo": "taskotter/taskotter",
+        "owner": "control-plane",
+        "work": "Promote runner protocol and HTTPS fallback schemas into the canonical contract generation source, then generate control-plane validators and compatibility tests from these fixture paths."
+      }
+    ]
   }
 }

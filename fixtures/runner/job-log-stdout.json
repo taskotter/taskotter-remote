@@ -1,0 +1,12 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.log",
+  "payload": {
+    "job_id": "job_fixture_echo_001",
+    "runner_id": "local-dev-runner",
+    "sequence": 3,
+    "stream": "stdout",
+    "redacted": true,
+    "line": "hello from fixture"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema_name": "taskotter.remote.https_fallback",
+  "schema_version": "remote_https_fallback.v1alpha1",
+  "protocol_version": "remote.v1alpha1",
+  "status": "alpha_fixture_contract",
+  "endpoints": [
+    {
+      "method": "POST",
+      "path": "/v1/remote/runners/{runner_id}/poll",
+      "request": "HttpsFallbackPollRequest",
+      "response": "HttpsFallbackPollResponse",
+      "idempotency": "runner_id plus last_runner_event_sequence"
+    },
+    {
+      "method": "POST",
+      "path": "/v1/remote/runners/{runner_id}/events",
+      "request": "HttpsFallbackEventBatchRequest",
+      "response": "HttpsFallbackEventBatchResponse",
+      "idempotency": "idempotency_key"
+    }
+  ],
+  "semantics": [
+    "runner_initiates_outbound_https",
+    "control_plane_returns_dispatch_and_cancellation_commands",
+    "runner_posts_heartbeat_status_usage_result_and_error_events",
+    "logs_and_artifacts_use_https_upload_endpoints_when_large_or_binary",
+    "authorization_replay_audit_and_final_state_match_preferred_stream"
+  ],
+  "fixtures": [
+    "fixtures/https-fallback/poll-request.json",
+    "fixtures/https-fallback/poll-response-dispatch.json",
+    "fixtures/https-fallback/event-batch-request.json",
+    "fixtures/https-fallback/event-batch-response.json"
+  ]
+}
