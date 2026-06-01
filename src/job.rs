@@ -1,4 +1,6 @@
-use crate::protocol::{AdapterKind, ArtifactDescriptor, ArtifactManifest, JobDispatch, LogChunk};
+use crate::protocol::{
+    AdapterKind, ArtifactDescriptor, ArtifactManifest, JobDispatch, JobLifecyclePhase, LogChunk,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -36,7 +38,7 @@ pub struct JobOutcome {
     pub job_id: String,
     pub runner_id: String,
     pub correlation_id: String,
-    pub state: JobState,
+    pub state: JobLifecyclePhase,
     pub exit_code: Option<i32>,
     pub message: String,
 }
@@ -186,7 +188,7 @@ pub fn run_noop_or_echo(dispatch: &JobDispatch) -> Result<AdapterRunOutput, JobS
             job_id: dispatch.job_id.clone(),
             runner_id: dispatch.runner_id.clone(),
             correlation_id: dispatch.correlation_id.clone(),
-            state: lifecycle.state(),
+            state: JobLifecyclePhase::Completed,
             exit_code: Some(0),
             message: "local echo lifecycle completed".to_string(),
         },
@@ -211,28 +213,28 @@ pub fn simulate_noop_lifecycle(
 
     let (final_state, exit_code, message, stream, line) = match terminal {
         SimulatedTerminalOutcome::Succeeded => (
-            JobState::Succeeded,
+            JobLifecyclePhase::Completed,
             Some(0),
             "local noop lifecycle completed",
             "stdout",
             "noop adapter completed without side effects",
         ),
         SimulatedTerminalOutcome::Failed => (
-            JobState::Failed,
+            JobLifecyclePhase::Failed,
             Some(1),
             "local noop lifecycle failed before result upload",
             "stderr",
             "noop simulation injected deterministic failure",
         ),
         SimulatedTerminalOutcome::Cancelled => (
-            JobState::Cancelled,
+            JobLifecyclePhase::Cancelled,
             None,
             "local noop lifecycle cancelled by control plane request",
             "stderr",
             "noop simulation observed operator_requested cancellation",
         ),
         SimulatedTerminalOutcome::TimedOut => (
-            JobState::TimedOut,
+            JobLifecyclePhase::TimedOut,
             None,
             "local noop lifecycle exceeded dispatch timeout",
             "stderr",
@@ -348,7 +350,7 @@ mod tests {
 
         let output = run_noop_or_echo(&dispatch).expect("echo lifecycle should succeed");
 
-        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.outcome.state, JobLifecyclePhase::Completed);
         assert_eq!(output.logs[0].sequence, 1);
         assert_eq!(output.logs[0].line, "hello from fixture");
         assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
@@ -367,7 +369,7 @@ mod tests {
 
         let output = run_noop_or_echo(&dispatch).expect("noop lifecycle should succeed");
 
-        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.outcome.state, JobLifecyclePhase::Completed);
         assert_eq!(output.outcome.exit_code, Some(0));
         assert_eq!(
             output.logs[0].line,
@@ -390,25 +392,25 @@ mod tests {
         for (terminal, state, exit_code, stream) in [
             (
                 SimulatedTerminalOutcome::Succeeded,
-                JobState::Succeeded,
+                JobLifecyclePhase::Completed,
                 Some(0),
                 "stdout",
             ),
             (
                 SimulatedTerminalOutcome::Failed,
-                JobState::Failed,
+                JobLifecyclePhase::Failed,
                 Some(1),
                 "stderr",
             ),
             (
                 SimulatedTerminalOutcome::Cancelled,
-                JobState::Cancelled,
+                JobLifecyclePhase::Cancelled,
                 None,
                 "stderr",
             ),
             (
                 SimulatedTerminalOutcome::TimedOut,
-                JobState::TimedOut,
+                JobLifecyclePhase::TimedOut,
                 None,
                 "stderr",
             ),

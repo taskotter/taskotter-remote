@@ -260,7 +260,7 @@ pub struct UsageReport {
 
 #[cfg(test)]
 mod tests {
-    use crate::job::{JobOutcome, JobState};
+    use crate::job::JobOutcome;
     use serde_json::json;
 
     use super::*;
@@ -351,22 +351,22 @@ mod tests {
             (
                 include_str!("../fixtures/runner/noop-lifecycle-success.json"),
                 UsageAttemptStatus::Succeeded,
-                JobState::Succeeded,
+                JobLifecyclePhase::Completed,
             ),
             (
                 include_str!("../fixtures/runner/noop-lifecycle-failure.json"),
                 UsageAttemptStatus::Failed,
-                JobState::Failed,
+                JobLifecyclePhase::Failed,
             ),
             (
                 include_str!("../fixtures/runner/noop-lifecycle-cancelled.json"),
                 UsageAttemptStatus::Cancelled,
-                JobState::Cancelled,
+                JobLifecyclePhase::Cancelled,
             ),
             (
                 include_str!("../fixtures/runner/noop-lifecycle-timeout.json"),
                 UsageAttemptStatus::Timeout,
-                JobState::TimedOut,
+                JobLifecyclePhase::TimedOut,
             ),
         ] {
             let envelopes: Vec<ProtocolEnvelope<serde_json::Value>> =

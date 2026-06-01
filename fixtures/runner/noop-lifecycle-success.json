@@ -53,7 +53,7 @@
       "job_id": "job_fixture_noop_001",
       "runner_id": "local-dev-runner",
       "correlation_id": "corr_fixture_noop_001",
-      "state": "succeeded",
+      "state": "completed",
       "exit_code": 0,
       "message": "local noop lifecycle completed"
     }
