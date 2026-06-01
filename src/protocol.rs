@@ -1,8 +1,26 @@
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use uuid::Uuid;
 
 pub const PROTOCOL_VERSION: &str = "remote.v1alpha1";
 pub const USAGE_SCHEMA_VERSION: &str = "remote_usage_report.v1";
+pub const SUPPORTED_PROTOCOL_VERSIONS: &[&str] = &[PROTOCOL_VERSION];
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ProtocolCompatibilityError {
+    #[error("unsupported remote protocol version: {0}")]
+    UnsupportedProtocolVersion(String),
+}
+
+pub fn validate_protocol_version(version: &str) -> Result<(), ProtocolCompatibilityError> {
+    if SUPPORTED_PROTOCOL_VERSIONS.contains(&version) {
+        Ok(())
+    } else {
+        Err(ProtocolCompatibilityError::UnsupportedProtocolVersion(
+            version.to_string(),
+        ))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProtocolEnvelope<T> {
@@ -234,6 +252,7 @@ mod tests {
         let envelope: ProtocolEnvelope<JobDispatch> =
             serde_json::from_str(fixture).expect("fixture should match job dispatch contract");
 
+        validate_protocol_version(&envelope.protocol_version).unwrap();
         assert_eq!(envelope.protocol_version, PROTOCOL_VERSION);
         assert_eq!(envelope.message_type, "job.dispatch");
         assert_eq!(envelope.payload.adapter, AdapterKind::Echo);
@@ -262,5 +281,40 @@ mod tests {
         assert_eq!(error.message_type, "job.error");
         assert_eq!(error.payload.category, ErrorCategory::Timeout);
         assert!(error.payload.retryable);
+    }
+
+    #[test]
+    fn rejects_unsupported_control_plane_protocol_fixture() {
+        let fixture =
+            include_str!("../fixtures/control-plane/job-dispatch-unsupported-protocol.json");
+        let envelope: ProtocolEnvelope<serde_json::Value> =
+            serde_json::from_str(fixture).expect("unsupported fixture should remain parseable");
+
+        assert_eq!(
+            validate_protocol_version(&envelope.protocol_version),
+            Err(ProtocolCompatibilityError::UnsupportedProtocolVersion(
+                "remote.v2alpha1".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn contract_compatibility_matrix_declares_supported_versions() {
+        let matrix: serde_json::Value =
+            serde_json::from_str(include_str!("../contract-compatibility.json"))
+                .expect("compatibility declaration should parse");
+        let versions = matrix["remote"]["supported_protocol_versions"]
+            .as_array()
+            .expect("supported protocol versions must be declared");
+        let usage_versions = matrix["remote"]["usage_schema_versions"]
+            .as_array()
+            .expect("usage schema versions must be declared");
+
+        assert!(versions.iter().any(|version| version == PROTOCOL_VERSION));
+        assert!(
+            usage_versions
+                .iter()
+                .any(|version| version == USAGE_SCHEMA_VERSION)
+        );
     }
 }

@@ -1,0 +1,33 @@
+{
+  "protocol_version": "remote.v2alpha1",
+  "message_type": "job.dispatch",
+  "payload": {
+    "lease_id": "lease_fixture_unsupported_001",
+    "job_id": "job_fixture_unsupported_001",
+    "runner_id": "local-dev-runner",
+    "correlation_id": "corr_fixture_unsupported_001",
+    "idempotency_key": "idem_fixture_unsupported_001",
+    "adapter": "echo",
+    "input": {
+      "echo": "unsupported protocol fixture"
+    },
+    "timeout_seconds": 60,
+    "policy": {
+      "policy_version": "policy_fixture_v1",
+      "working_group_id": "wg-dev",
+      "allowed_capabilities": ["echo"],
+      "risky_actions": ["write_job_workspace"],
+      "workspace": {
+        "workspace_id": "workspace_fixture_001",
+        "root_strategy": "temporary_isolated",
+        "allowed_env": ["PATH", "TMPDIR"],
+        "scoped_credential_ref": "runner-scoped-credential-ref",
+        "artifact_path_allowlist": ["stdout.txt"]
+      },
+      "network": {
+        "mode": "deny_all",
+        "allowed_targets": []
+      }
+    }
+  }
+}

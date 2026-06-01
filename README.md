@@ -71,6 +71,16 @@ because no real provider adapter is executed.
 The control-plane generated OpenAPI document is the MVP source of truth for this
 schema until a generated shared schema package exists.
 
+## Compatibility Checks
+
+`contract-compatibility.json` declares the supported control-plane and runner
+protocol versions consumed by this repository. `cargo test
+protocol::tests::contract_compatibility_matrix_declares_supported_versions` and
+`cargo test protocol::tests::rejects_unsupported_control_plane_protocol_fixture`
+are the repo-local compatibility checks used by CI; they keep the supported
+`remote.v1alpha1` protocol explicit and fail when an unsupported protocol fixture
+is accepted.
+
 ## MVP Limitations
 
 - Job execution is a placeholder state transition, not process execution.
