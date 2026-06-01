@@ -1,0 +1,17 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.artifacts",
+  "payload": {
+    "job_id": "job_fixture_echo_001",
+    "runner_id": "local-dev-runner",
+    "artifacts": [
+      {
+        "path_label": "stdout.txt",
+        "content_type": "text/plain",
+        "size_bytes": 18,
+        "checksum_sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+        "retention_policy": "standard_30d"
+      }
+    ]
+  }
+}

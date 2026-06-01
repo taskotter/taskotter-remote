@@ -1,0 +1,17 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "runner.heartbeat",
+  "payload": {
+    "runner_id": "local-dev-runner",
+    "capability_inventory_version": "cap_fixture_v1",
+    "daemon_version": "0.1.0",
+    "health": "online",
+    "active_job_ids": [
+      "job_fixture_echo_001"
+    ],
+    "available_concurrency": 1,
+    "clock_skew_ms": 12,
+    "resource_pressure": [],
+    "last_error_category": null
+  }
+}

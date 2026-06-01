@@ -1,0 +1,8 @@
+{
+  "schema_version": "remote_https_fallback.v1alpha1",
+  "runner_id": "local-dev-runner",
+  "protocol_version": "remote.v1alpha1",
+  "capability_inventory_version": "cap_fixture_v1",
+  "last_control_plane_event_id": null,
+  "last_runner_event_sequence": 0
+}
