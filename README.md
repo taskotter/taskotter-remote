@@ -68,6 +68,11 @@ The initial fixture set lives under `fixtures/`:
 - `fixtures/control-plane/job-dispatch-unsupported-protocol.json` models an
   unsupported future protocol major/minor line that must stay rejected.
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
+- `fixtures/control-plane/signed-dispatch-fixtures.json` documents the
+  fixture-level signed dispatch wrapper while the shared runner protocol schema
+  is still pending. Unit tests generate deterministic fake Ed25519 keys and
+  cover valid, expired, replayed, cross-key re-sign replay, wrong-scope,
+  rotated-key, and post-retirement signing behavior.
 - `fixtures/runner/heartbeat-online.json`, `fixtures/runner/job-log-stdout.json`,
   `fixtures/runner/job-artifacts.json`, `fixtures/runner/job-usage-succeeded.json`,
   and `fixtures/runner/job-final-result-succeeded.json` model deterministic
@@ -95,6 +100,15 @@ because no real provider adapter is executed.
 
 The control-plane generated OpenAPI document is the MVP source of truth for this
 schema until a generated shared schema package exists.
+
+`dispatch_auth` is the local signed instruction boundary. It canonicalizes the
+dispatch envelope plus signature metadata with sorted JSON fields, verifies
+Ed25519 signatures by `key_id`, enforces runner scope, rejects expired
+instructions, records dispatch-identity replay keys through a cache trait, and
+allows retired keys only when the signature was created before the configured
+retirement time plus clock skew and is still inside the verification window. It
+intentionally does not include KMS integration, production signing services,
+private key storage, or transport selection.
 
 ## Runtime Adapter Scaffold
 

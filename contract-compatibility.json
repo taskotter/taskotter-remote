@@ -17,6 +17,7 @@
       "fixtures/control-plane/job-dispatch-echo.json",
       "fixtures/control-plane/job-dispatch-noop.json",
       "fixtures/control-plane/job-cancel.json",
+      "fixtures/control-plane/signed-dispatch-fixtures.json",
       "fixtures/runner/heartbeat-online.json",
       "fixtures/runner/job-log-stdout.json",
       "fixtures/runner/job-artifacts.json",
