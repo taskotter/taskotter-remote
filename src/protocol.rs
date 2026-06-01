@@ -260,6 +260,7 @@ pub struct UsageReport {
 
 #[cfg(test)]
 mod tests {
+    use crate::job::{JobOutcome, JobState};
     use serde_json::json;
 
     use super::*;
@@ -342,6 +343,68 @@ mod tests {
         assert!(error.payload.retryable);
         assert_eq!(policy_denied.payload.category, ErrorCategory::PolicyDenied);
         assert!(!policy_denied.payload.retryable);
+    }
+
+    #[test]
+    fn deserializes_noop_lifecycle_evidence_fixtures() {
+        for (fixture, expected_status, expected_state) in [
+            (
+                include_str!("../fixtures/runner/noop-lifecycle-success.json"),
+                UsageAttemptStatus::Succeeded,
+                JobState::Succeeded,
+            ),
+            (
+                include_str!("../fixtures/runner/noop-lifecycle-failure.json"),
+                UsageAttemptStatus::Failed,
+                JobState::Failed,
+            ),
+            (
+                include_str!("../fixtures/runner/noop-lifecycle-cancelled.json"),
+                UsageAttemptStatus::Cancelled,
+                JobState::Cancelled,
+            ),
+            (
+                include_str!("../fixtures/runner/noop-lifecycle-timeout.json"),
+                UsageAttemptStatus::Timeout,
+                JobState::TimedOut,
+            ),
+        ] {
+            let envelopes: Vec<ProtocolEnvelope<serde_json::Value>> =
+                serde_json::from_str(fixture).expect("lifecycle fixture should parse");
+            let message_types: Vec<&str> = envelopes
+                .iter()
+                .map(|envelope| envelope.message_type.as_str())
+                .collect();
+
+            assert_eq!(
+                message_types,
+                vec![
+                    "job.log.chunk",
+                    "job.artifact.manifest",
+                    "job.usage.report",
+                    "job.final_result"
+                ]
+            );
+            for envelope in &envelopes {
+                validate_protocol_version(&envelope.protocol_version).unwrap();
+            }
+
+            let log: LogChunk = serde_json::from_value(envelopes[0].payload.clone())
+                .expect("log chunk should match contract");
+            let artifacts: ArtifactManifest = serde_json::from_value(envelopes[1].payload.clone())
+                .expect("artifact manifest should match contract");
+            let usage: UsageReport = serde_json::from_value(envelopes[2].payload.clone())
+                .expect("usage report should match contract");
+            let result: JobOutcome = serde_json::from_value(envelopes[3].payload.clone())
+                .expect("final result should match contract");
+
+            assert_eq!(log.sequence, 1);
+            assert_eq!(artifacts.job_id, "job_fixture_noop_001");
+            assert_eq!(usage.schema_version, USAGE_SCHEMA_VERSION);
+            assert_eq!(usage.status, expected_status);
+            assert_eq!(result.state, expected_state);
+            assert_eq!(result.correlation_id, "corr_fixture_noop_001");
+        }
     }
 
     #[test]

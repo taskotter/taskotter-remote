@@ -1,0 +1,53 @@
+[
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.log.chunk",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "sequence": 1,
+      "stream": "stderr",
+      "redacted": false,
+      "line": "noop simulation injected deterministic failure"
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.artifact.manifest",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "artifacts": []
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.usage.report",
+    "payload": {
+      "schema_version": "remote_usage_report.v1",
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "request_id": null,
+      "correlation_id": "corr_fixture_noop_001",
+      "status": "failed",
+      "duration_ms": 0,
+      "cpu_time_ms": null,
+      "peak_memory_bytes": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "estimated_cost_micro_usd": 0
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.final_result",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "correlation_id": "corr_fixture_noop_001",
+      "state": "failed",
+      "exit_code": 1,
+      "message": "local noop lifecycle failed before result upload"
+    }
+  }
+]

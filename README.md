@@ -55,6 +55,9 @@ The initial fixture set lives under `fixtures/`:
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
+- `fixtures/runner/noop-lifecycle-*.json` model deterministic no-op success,
+  failure, cancellation, and timeout evidence envelopes for log, artifact,
+  usage, and final-result reporting.
 
 `cargo run -- run-once --config examples/remote.toml` consumes the bundled echo
 dispatch fixture, applies local config placeholders for workspace, environment,
@@ -97,6 +100,9 @@ Adapter results use terminal lifecycle phases compatible with the runner job
 states: `completed`, `failed`, `cancelled`, `timed_out`, and `policy_denied`.
 Local LLM attempts still require `job.usage.report` evidence even when provider
 cost is zero.
+
+The no-op lifecycle fixtures are contract-only simulations. They do not execute
+commands, read ambient credentials, upload artifacts, or perform network I/O.
 
 ## Compatibility Checks
 
