@@ -63,6 +63,10 @@ The initial fixture set lives under `fixtures/`:
   plane dispatch to the echo adapter.
 - `fixtures/control-plane/job-dispatch-noop.json` models a no-op dispatch that
   preserves the side-effect-free runner bootstrap regression path.
+- `fixtures/control-plane/job-dispatch-additive-field.json` models forward
+  compatible additive fields that the current runner must tolerate.
+- `fixtures/control-plane/job-dispatch-unsupported-protocol.json` models an
+  unsupported future protocol major/minor line that must stay rejected.
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
 - `fixtures/runner/heartbeat-online.json`, `fixtures/runner/job-log-stdout.json`,
   `fixtures/runner/job-artifacts.json`, `fixtures/runner/job-usage-succeeded.json`,
@@ -121,10 +125,20 @@ cost is zero.
 
 `contract-compatibility.json` declares the supported control-plane and runner
 protocol versions, schema snapshots, HTTPS fallback schema version, and fixture
-paths consumed by this repository. `cargo test protocol::tests` is the
-repo-local compatibility check used by CI; it keeps `remote.v1alpha1`,
-`remote_usage_report.v1`, and `remote_https_fallback.v1alpha1` explicit and
-fails when an unsupported protocol fixture is accepted.
+paths consumed by this repository.
+`scripts/check-contract-compatibility.sh` is the CI-ready local entry point; it
+runs format, clippy, the targeted compatibility matrix checks, and the full test
+suite. The targeted checks keep the supported `remote.v1alpha1` protocol
+explicit alongside `remote_usage_report.v1` and
+`remote_https_fallback.v1alpha1`, verify unknown additive control-plane fields
+remain tolerated, reject the unsupported `remote.v2alpha1` fixture, and prove
+manifest validation fails when a required fixture path is missing.
+
+Future contract updates should change the manifest and fixtures in the same
+patch as the protocol code. Additive minor changes should add a new
+`additive_tolerance_fixtures` entry. Breaking changes should add or update a
+`negative_cases.unsupported_protocol_fixture` entry and document the compatibility
+window before a release gate consumes it.
 
 Control-plane follow-up: `taskotter/taskotter` still needs to promote these
 repo-local schema snapshots into the canonical generated contract source and add

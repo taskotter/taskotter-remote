@@ -332,9 +332,71 @@ pub struct HttpsFallbackEventBatchResponse {
 
 #[cfg(test)]
 mod tests {
+    use std::{fmt, path::Path};
+
+    use serde::Deserialize;
     use serde_json::json;
 
     use super::*;
+
+    #[derive(Debug, Deserialize)]
+    struct ContractCompatibilityMatrix {
+        remote: RemoteCompatibility,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct RemoteCompatibility {
+        supported_protocol_versions: Vec<String>,
+        usage_schema_versions: Vec<String>,
+        https_fallback_schema_versions: Vec<String>,
+        adapter_contract_versions: Vec<String>,
+        schemas: Vec<String>,
+        fixtures: Vec<String>,
+        additive_tolerance_fixtures: Vec<String>,
+        negative_cases: NegativeCompatibilityCases,
+        consumer_followups: Vec<ConsumerFollowup>,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct NegativeCompatibilityCases {
+        unsupported_protocol_fixture: String,
+        missing_fixture_path: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct ConsumerFollowup {
+        repo: String,
+        owner: String,
+        work: String,
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    enum ManifestValidationError {
+        MissingFixture(String),
+    }
+
+    impl fmt::Display for ManifestValidationError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::MissingFixture(path) => write!(f, "manifest fixture is missing: {path}"),
+            }
+        }
+    }
+
+    fn compatibility_matrix() -> ContractCompatibilityMatrix {
+        serde_json::from_str(include_str!("../contract-compatibility.json"))
+            .expect("compatibility declaration should parse")
+    }
+
+    fn validate_manifest_fixture_paths(fixtures: &[String]) -> Result<(), ManifestValidationError> {
+        for fixture in fixtures {
+            if !Path::new(fixture).exists() {
+                return Err(ManifestValidationError::MissingFixture(fixture.clone()));
+            }
+        }
+
+        Ok(())
+    }
 
     #[test]
     fn serializes_remote_usage_report_contract() {
@@ -392,6 +454,25 @@ mod tests {
         assert_eq!(envelope.payload.adapter, AdapterKind::Noop);
         assert_eq!(envelope.payload.policy.network.mode, "deny_all");
         assert!(envelope.payload.policy.risky_actions.is_empty());
+    }
+
+    #[test]
+    fn deserializes_additive_control_plane_fixture() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-additive-field.json");
+        let envelope: ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).expect("additive fixture should stay compatible");
+
+        validate_protocol_version(&envelope.protocol_version).unwrap();
+        assert_eq!(envelope.message_type, "job.dispatch");
+        assert_eq!(envelope.payload.adapter, AdapterKind::Echo);
+        assert_eq!(
+            envelope.payload.input["echo"],
+            json!("additive fixture remains compatible")
+        );
+        assert_eq!(
+            envelope.payload.policy.workspace.artifact_path_allowlist,
+            vec!["stdout.txt".to_string()]
+        );
     }
 
     #[test]
@@ -521,10 +602,12 @@ mod tests {
 
     #[test]
     fn rejects_unsupported_control_plane_protocol_fixture() {
+        let matrix = compatibility_matrix();
         let fixture =
-            include_str!("../fixtures/control-plane/job-dispatch-unsupported-protocol.json");
+            std::fs::read_to_string(&matrix.remote.negative_cases.unsupported_protocol_fixture)
+                .expect("unsupported fixture should exist for negative protocol coverage");
         let envelope: ProtocolEnvelope<serde_json::Value> =
-            serde_json::from_str(fixture).expect("unsupported fixture should remain parseable");
+            serde_json::from_str(&fixture).expect("unsupported fixture should remain parseable");
 
         assert_eq!(
             validate_protocol_version(&envelope.protocol_version),
@@ -536,35 +619,76 @@ mod tests {
 
     #[test]
     fn contract_compatibility_matrix_declares_supported_versions() {
-        let matrix: serde_json::Value =
-            serde_json::from_str(include_str!("../contract-compatibility.json"))
-                .expect("compatibility declaration should parse");
-        let versions = matrix["remote"]["supported_protocol_versions"]
-            .as_array()
-            .expect("supported protocol versions must be declared");
-        let usage_versions = matrix["remote"]["usage_schema_versions"]
-            .as_array()
-            .expect("usage schema versions must be declared");
+        let matrix = compatibility_matrix();
 
-        assert!(versions.iter().any(|version| version == PROTOCOL_VERSION));
         assert!(
-            usage_versions
+            matrix
+                .remote
+                .supported_protocol_versions
+                .iter()
+                .any(|version| version == PROTOCOL_VERSION)
+        );
+        assert!(
+            matrix
+                .remote
+                .usage_schema_versions
                 .iter()
                 .any(|version| version == USAGE_SCHEMA_VERSION)
         );
         assert!(
-            matrix["remote"]["adapter_contract_versions"]
-                .as_array()
-                .expect("adapter contract versions must be declared")
+            matrix
+                .remote
+                .adapter_contract_versions
                 .iter()
                 .any(|version| version == "remote_adapter_contract.v1alpha1")
         );
         assert!(
-            matrix["remote"]["https_fallback_schema_versions"]
-                .as_array()
-                .expect("HTTPS fallback schema versions must be declared")
+            matrix
+                .remote
+                .https_fallback_schema_versions
                 .iter()
                 .any(|version| version == HTTPS_FALLBACK_SCHEMA_VERSION)
+        );
+        assert!(matrix.remote.fixtures.len() >= 14);
+        assert!(
+            matrix
+                .remote
+                .additive_tolerance_fixtures
+                .iter()
+                .any(|fixture| fixture == "fixtures/control-plane/job-dispatch-additive-field.json")
+        );
+        assert!(
+            matrix
+                .remote
+                .negative_cases
+                .missing_fixture_path
+                .ends_with("job-dispatch-missing-required-fixture.json")
+        );
+        assert!(matrix.remote.consumer_followups.iter().any(|followup| {
+            followup.repo == "taskotter/taskotter"
+                && followup.owner == "control-plane"
+                && followup.work.contains("canonical contract generation")
+        }));
+        validate_manifest_fixture_paths(&matrix.remote.schemas).unwrap();
+        validate_manifest_fixture_paths(&matrix.remote.fixtures).unwrap();
+        validate_manifest_fixture_paths(&matrix.remote.additive_tolerance_fixtures).unwrap();
+        validate_manifest_fixture_paths(std::slice::from_ref(
+            &matrix.remote.negative_cases.unsupported_protocol_fixture,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn contract_compatibility_matrix_fails_for_missing_fixture() {
+        let matrix = compatibility_matrix();
+
+        assert_eq!(
+            validate_manifest_fixture_paths(std::slice::from_ref(
+                &matrix.remote.negative_cases.missing_fixture_path,
+            )),
+            Err(ManifestValidationError::MissingFixture(
+                "fixtures/control-plane/job-dispatch-missing-required-fixture.json".to_string()
+            ))
         );
     }
 }
