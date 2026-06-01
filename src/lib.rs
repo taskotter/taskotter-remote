@@ -1,3 +1,4 @@
+pub mod adapters;
 pub mod capabilities;
 pub mod config;
 pub mod daemon;

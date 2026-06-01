@@ -6,10 +6,13 @@
   "remote": {
     "supported_protocol_versions": ["remote.v1alpha1"],
     "usage_schema_versions": ["remote_usage_report.v1"],
+    "adapter_contract_versions": ["remote_adapter_contract.v1alpha1"],
     "fixtures": [
       "fixtures/control-plane/job-dispatch-echo.json",
+      "fixtures/control-plane/job-dispatch-noop.json",
       "fixtures/control-plane/job-cancel.json",
-      "fixtures/runner/job-error-timeout.json"
+      "fixtures/runner/job-error-timeout.json",
+      "fixtures/runner/job-error-policy-denied.json"
     ],
     "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json"
   }

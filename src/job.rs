@@ -140,6 +140,7 @@ pub fn run_noop_or_echo(dispatch: &JobDispatch) -> Result<AdapterRunOutput, JobS
             .and_then(serde_json::Value::as_str)
             .unwrap_or("echo adapter completed")
             .to_string(),
+        adapter => return Err(JobStateError::UnsupportedAdapter(adapter)),
     };
 
     lifecycle.transition(JobState::StreamingLogs)?;
@@ -240,6 +241,28 @@ mod tests {
         assert_eq!(output.outcome.state, JobState::Succeeded);
         assert_eq!(output.logs[0].sequence, 1);
         assert_eq!(output.logs[0].line, "hello from fixture");
+        assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
+    }
+
+    #[test]
+    fn noop_adapter_runs_side_effect_free_lifecycle_from_dispatch_fixture() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-noop.json");
+        let envelope: crate::protocol::ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).unwrap();
+        let dispatch = envelope.payload;
+
+        let lease = lease_from_dispatch(&dispatch);
+        assert!(lease.allowed_env.is_empty());
+        assert!(lease.risky_actions.is_empty());
+
+        let output = run_noop_or_echo(&dispatch).expect("noop lifecycle should succeed");
+
+        assert_eq!(output.outcome.state, JobState::Succeeded);
+        assert_eq!(output.outcome.exit_code, Some(0));
+        assert_eq!(
+            output.logs[0].line,
+            "noop adapter completed without side effects"
+        );
         assert_eq!(output.artifacts.artifacts[0].path_label, "stdout.txt");
     }
 }

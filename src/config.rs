@@ -32,11 +32,57 @@ pub struct RemoteConfig {
 pub struct CapabilityOverrides {
     pub network_zone: Option<String>,
     #[serde(default)]
-    pub local_llm_endpoints: Vec<String>,
+    pub local_llm_endpoints: Vec<LocalLlmEndpointConfig>,
+    #[serde(default)]
+    pub external_agent_adapters: Vec<ExternalAgentAdapterConfig>,
+    #[serde(default)]
+    pub allowlisted_command_adapters: Vec<AllowlistedCommandAdapterConfig>,
     #[serde(default)]
     pub local_tools: Vec<String>,
     #[serde(default)]
     pub mcp_host_modes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LocalLlmEndpointConfig {
+    pub id: String,
+    pub provider: String,
+    pub base_url: String,
+    #[serde(default)]
+    pub model_ids: Vec<String>,
+    #[serde(default)]
+    pub health_status: EndpointHealthStatus,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EndpointHealthStatus {
+    Healthy,
+    Degraded,
+    Unreachable,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ExternalAgentAdapterConfig {
+    pub id: String,
+    pub runtime: String,
+    pub command_label: String,
+    #[serde(default)]
+    pub supported_isolation_modes: Vec<String>,
+    #[serde(default)]
+    pub supported_network_modes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AllowlistedCommandAdapterConfig {
+    pub id: String,
+    pub command_label: String,
+    #[serde(default)]
+    pub allowed_args: Vec<String>,
+    #[serde(default)]
+    pub allowed_env: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
