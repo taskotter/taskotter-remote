@@ -96,11 +96,17 @@ pub struct PolicySnapshot {
     pub network: NetworkPolicy,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AdapterKind {
     Noop,
     Echo,
+    OpenAiCompatibleLocalLlm,
+    OllamaLocalLlm,
+    SelfHostedLocalLlm,
+    CodexAgent,
+    ClaudeCodeAgent,
+    AllowlistedCommand,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -114,6 +120,42 @@ pub struct JobDispatch {
     pub input: serde_json::Value,
     pub timeout_seconds: u64,
     pub policy: PolicySnapshot,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum JobLifecyclePhase {
+    Queued,
+    Leased,
+    Preparing,
+    Running,
+    Finishing,
+    Completed,
+    Failed,
+    Cancelled,
+    TimedOut,
+    PolicyDenied,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdapterExecutionMetadata {
+    pub adapter_id: String,
+    pub adapter_kind: AdapterKind,
+    pub isolation_mode: String,
+    pub network_mode: String,
+    pub scoped_credential_refs: Vec<String>,
+    pub audit_labels: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AdapterResult {
+    pub job_id: String,
+    pub runner_id: String,
+    pub phase: JobLifecyclePhase,
+    pub exit_code: Option<i32>,
+    pub usage: UsageReport,
+    pub artifacts: Vec<ArtifactDescriptor>,
+    pub audit_metadata: AdapterExecutionMetadata,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -268,6 +310,19 @@ mod tests {
     }
 
     #[test]
+    fn deserializes_noop_job_dispatch_fixture() {
+        let fixture = include_str!("../fixtures/control-plane/job-dispatch-noop.json");
+        let envelope: ProtocolEnvelope<JobDispatch> =
+            serde_json::from_str(fixture).expect("noop fixture should match job dispatch contract");
+
+        validate_protocol_version(&envelope.protocol_version).unwrap();
+        assert_eq!(envelope.message_type, "job.dispatch");
+        assert_eq!(envelope.payload.adapter, AdapterKind::Noop);
+        assert_eq!(envelope.payload.policy.network.mode, "deny_all");
+        assert!(envelope.payload.policy.risky_actions.is_empty());
+    }
+
+    #[test]
     fn deserializes_cancellation_and_error_taxonomy_fixtures() {
         let cancel: ProtocolEnvelope<CancellationRequest> =
             serde_json::from_str(include_str!("../fixtures/control-plane/job-cancel.json"))
@@ -275,12 +330,18 @@ mod tests {
         let error: ProtocolEnvelope<RunnerError> =
             serde_json::from_str(include_str!("../fixtures/runner/job-error-timeout.json"))
                 .expect("error fixture should match runner error contract");
+        let policy_denied: ProtocolEnvelope<RunnerError> = serde_json::from_str(include_str!(
+            "../fixtures/runner/job-error-policy-denied.json"
+        ))
+        .expect("policy denied fixture should match runner error contract");
 
         assert_eq!(cancel.message_type, "job.cancel");
         assert_eq!(cancel.payload.reason, "operator_requested");
         assert_eq!(error.message_type, "job.error");
         assert_eq!(error.payload.category, ErrorCategory::Timeout);
         assert!(error.payload.retryable);
+        assert_eq!(policy_denied.payload.category, ErrorCategory::PolicyDenied);
+        assert!(!policy_denied.payload.retryable);
     }
 
     #[test]
@@ -315,6 +376,13 @@ mod tests {
             usage_versions
                 .iter()
                 .any(|version| version == USAGE_SCHEMA_VERSION)
+        );
+        assert!(
+            matrix["remote"]["adapter_contract_versions"]
+                .as_array()
+                .expect("adapter contract versions must be declared")
+                .iter()
+                .any(|version| version == "remote_adapter_contract.v1alpha1")
         );
     }
 }

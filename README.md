@@ -50,6 +50,8 @@ The initial fixture set lives under `fixtures/`:
 
 - `fixtures/control-plane/job-dispatch-echo.json` models a policy-scoped control
   plane dispatch to the echo adapter.
+- `fixtures/control-plane/job-dispatch-noop.json` models a no-op dispatch that
+  preserves the side-effect-free runner bootstrap regression path.
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
@@ -70,6 +72,31 @@ because no real provider adapter is executed.
 
 The control-plane generated OpenAPI document is the MVP source of truth for this
 schema until a generated shared schema package exists.
+
+## Runtime Adapter Scaffold
+
+The runner now advertises three adapter capability groups in the capability
+snapshot:
+
+- `local_llm_endpoints` for OpenAI-compatible, Ollama-style, or self-hosted
+  local endpoint inventory, including health status and model IDs.
+- `external_agent_adapters` for Codex-style or Claude Code-style execution
+  runtimes that can mutate the job workspace and must be treated as command/file
+  execution boundaries rather than ordinary provider LLM calls.
+- `allowlisted_command_adapters` for narrow command labels and argument/env
+  allowlists.
+
+`adapters::plan_adapter_execution` is the dispatch scaffold. It verifies that
+the runner advertised a matching capability and evaluates the high-risk feature
+flag plus policy allowance before any adapter execution would start. It returns
+audit metadata containing only scoped credential references, isolation mode,
+network mode, policy version, and working group labels. It does not pass global
+TaskOtter credentials to adapters and does not execute shell commands.
+
+Adapter results use terminal lifecycle phases compatible with the runner job
+states: `completed`, `failed`, `cancelled`, `timed_out`, and `policy_denied`.
+Local LLM attempts still require `job.usage.report` evidence even when provider
+cost is zero.
 
 ## Compatibility Checks
 

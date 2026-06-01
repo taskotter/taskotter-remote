@@ -12,9 +12,28 @@ job_timeout_seconds = 1800
 
 [capability_overrides]
 network_zone = "private-local"
-local_llm_endpoints = []
 local_tools = ["git", "cargo"]
 mcp_host_modes = ["stdio"]
+
+[[capability_overrides.local_llm_endpoints]]
+id = "ollama-local"
+provider = "ollama"
+base_url = "http://127.0.0.1:11434"
+model_ids = ["llama3.2"]
+health_status = "unknown"
+
+[[capability_overrides.external_agent_adapters]]
+id = "codex-local"
+runtime = "codex"
+command_label = "codex"
+supported_isolation_modes = ["temporary_isolated"]
+supported_network_modes = ["deny_all"]
+
+[[capability_overrides.allowlisted_command_adapters]]
+id = "cargo-test"
+command_label = "cargo"
+allowed_args = ["test"]
+allowed_env = ["PATH", "TMPDIR"]
 
 [feature_flags]
 local_tools_enabled = false

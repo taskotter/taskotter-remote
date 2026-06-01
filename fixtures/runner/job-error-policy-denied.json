@@ -1,0 +1,11 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.error",
+  "payload": {
+    "job_id": "job_fixture_external_agent_001",
+    "runner_id": "local-dev-runner",
+    "category": "policy_denied",
+    "retryable": false,
+    "message": "external agent runtime adapter denied before dispatch"
+  }
+}

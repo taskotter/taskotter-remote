@@ -1,0 +1,35 @@
+{
+  "protocol_version": "remote.v1alpha1",
+  "message_type": "job.dispatch",
+  "payload": {
+    "lease_id": "lease_fixture_noop_001",
+    "job_id": "job_fixture_noop_001",
+    "runner_id": "local-dev-runner",
+    "correlation_id": "corr_fixture_noop_001",
+    "idempotency_key": "idem_fixture_noop_001",
+    "adapter": "noop",
+    "input": {},
+    "timeout_seconds": 30,
+    "policy": {
+      "policy_version": "policy_fixture_v1",
+      "working_group_id": "wg-dev",
+      "allowed_capabilities": [
+        "noop"
+      ],
+      "risky_actions": [],
+      "workspace": {
+        "workspace_id": "workspace_fixture_001",
+        "root_strategy": "temporary_isolated",
+        "allowed_env": [],
+        "scoped_credential_ref": null,
+        "artifact_path_allowlist": [
+          "stdout.txt"
+        ]
+      },
+      "network": {
+        "mode": "deny_all",
+        "allowed_targets": []
+      }
+    }
+  }
+}
