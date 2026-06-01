@@ -6,3 +6,4 @@ pub mod gates;
 pub mod isolation;
 pub mod job;
 pub mod protocol;
+pub mod runner_lifecycle;

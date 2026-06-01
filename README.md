@@ -55,6 +55,9 @@ The initial fixture set lives under `fixtures/`:
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
+- `fixtures/runner/credential-lifecycle-simulator.json` models deterministic
+  runner registration token, runner state, credential expiry, disable, drain,
+  shared, quarantine, and rotation coverage without storing secret values.
 
 `cargo run -- run-once --config examples/remote.toml` consumes the bundled echo
 dispatch fixture, applies local config placeholders for workspace, environment,
