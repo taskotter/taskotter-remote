@@ -53,6 +53,10 @@ The initial fixture set lives under `fixtures/`:
 - `fixtures/control-plane/job-dispatch-noop.json` models a no-op dispatch that
   preserves the side-effect-free runner bootstrap regression path.
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
+- `fixtures/control-plane/signed-dispatch-fixtures.json` documents the
+  fixture-level signed dispatch wrapper while the shared runner protocol schema
+  is still pending. Unit tests generate deterministic fake Ed25519 keys and
+  cover valid, expired, replayed, wrong-scope, and rotated-key behavior.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
 
@@ -72,6 +76,14 @@ because no real provider adapter is executed.
 
 The control-plane generated OpenAPI document is the MVP source of truth for this
 schema until a generated shared schema package exists.
+
+`dispatch_auth` is the local signed instruction boundary. It canonicalizes the
+dispatch envelope plus signature metadata with sorted JSON fields, verifies
+Ed25519 signatures by `key_id`, enforces runner scope, rejects expired
+instructions, records replay keys through a cache trait, and allows retired keys
+only inside a configured verification window. It intentionally does not include
+KMS integration, production signing services, private key storage, or transport
+selection.
 
 ## Runtime Adapter Scaffold
 

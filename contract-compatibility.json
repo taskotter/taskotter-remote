@@ -11,6 +11,7 @@
       "fixtures/control-plane/job-dispatch-echo.json",
       "fixtures/control-plane/job-dispatch-noop.json",
       "fixtures/control-plane/job-cancel.json",
+      "fixtures/control-plane/signed-dispatch-fixtures.json",
       "fixtures/runner/job-error-timeout.json",
       "fixtures/runner/job-error-policy-denied.json"
     ],

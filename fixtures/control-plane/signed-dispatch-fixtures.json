@@ -1,0 +1,51 @@
+{
+  "fixture_contract": "signed_dispatch_fixture_interface.v1alpha1",
+  "schema_assumption": "Runner protocol schema is not merged yet; these cases define the remote-side wrapper fields and verification outcomes while unit tests generate deterministic fake Ed25519 signatures.",
+  "signature_algorithm": "ed25519",
+  "base_dispatch_fixture": "fixtures/control-plane/job-dispatch-echo.json",
+  "required_dispatch_fields": [
+    "lease_id",
+    "job_id",
+    "runner_id",
+    "correlation_id",
+    "idempotency_key",
+    "policy.policy_version",
+    "policy.working_group_id",
+    "policy.workspace.workspace_id"
+  ],
+  "signed_wrapper_fields": [
+    "dispatch",
+    "signature.key_id",
+    "signature.algorithm",
+    "signature.signed_at_unix_seconds",
+    "signature.expires_at_unix_seconds",
+    "signature.signature_base64"
+  ],
+  "cases": [
+    {
+      "name": "valid",
+      "key_id": "fixture-ed25519-active-2026-06",
+      "expected_result": "accepted"
+    },
+    {
+      "name": "expired",
+      "key_id": "fixture-ed25519-active-2026-06",
+      "expected_result": "dispatch_signature_expired"
+    },
+    {
+      "name": "replayed",
+      "key_id": "fixture-ed25519-active-2026-06",
+      "expected_result": "dispatch_replay_detected"
+    },
+    {
+      "name": "wrong-scope",
+      "key_id": "fixture-ed25519-active-2026-06",
+      "expected_result": "dispatch_scope_mismatch"
+    },
+    {
+      "name": "rotated-key",
+      "key_id": "fixture-ed25519-previous-2026-05",
+      "expected_result": "accepted_inside_rotation_window"
+    }
+  ]
+}
