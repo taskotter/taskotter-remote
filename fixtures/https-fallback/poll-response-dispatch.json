@@ -1,0 +1,88 @@
+{
+  "schema_version": "remote_https_fallback.v1alpha1",
+  "protocol_version": "remote.v1alpha1",
+  "control_plane_event_id": "cp_evt_fixture_001",
+  "commands": [
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "job.dispatch",
+      "payload": {
+        "lease_id": "lease_fixture_001",
+        "job_id": "job_fixture_echo_001",
+        "runner_id": "local-dev-runner",
+        "correlation_id": "corr_fixture_echo_001",
+        "idempotency_key": "idem_fixture_echo_001",
+        "adapter": "echo",
+        "input": {
+          "echo": "hello from fixture"
+        },
+        "timeout_seconds": 60,
+        "policy": {
+          "policy_version": "policy_fixture_v1",
+          "working_group_id": "wg-dev",
+          "allowed_capabilities": [
+            "echo"
+          ],
+          "risky_actions": [
+            "write_job_workspace"
+          ],
+          "workspace": {
+            "workspace_id": "workspace_fixture_001",
+            "root_strategy": "temporary_isolated",
+            "allowed_env": [
+              "PATH",
+              "TMPDIR"
+            ],
+            "scoped_credential_ref": "runner-scoped-credential-ref",
+            "artifact_path_allowlist": [
+              "stdout.txt"
+            ]
+          },
+          "network": {
+            "mode": "deny_all",
+            "allowed_targets": []
+          }
+        },
+        "signed_instruction": {
+          "instruction_id": "instr_fixture_001",
+          "job_id": "job_fixture_echo_001",
+          "lease_id": "lease_fixture_001",
+          "tenant_id": "tenant_fixture_001",
+          "runner_id": "local-dev-runner",
+          "capability_inventory_version": "cap_fixture_v1",
+          "protocol_version": "remote.v1alpha1",
+          "policy_decision_id": "policy_decision_fixture_001",
+          "policy_version": "policy_fixture_v1",
+          "allowed_adapter": "echo",
+          "execution_mode": "temporary_workspace",
+          "timeout_seconds": 60,
+          "max_concurrency_impact": 1,
+          "input_refs": [
+            "input_ref_fixture_001"
+          ],
+          "artifact_allowlist": [
+            "stdout.txt"
+          ],
+          "credential_ref": "job-credential-ref",
+          "credential_expires_at": "2026-06-01T22:00:00Z",
+          "credential_audience": "taskotter-runner-job",
+          "network": {
+            "mode": "deny_all",
+            "allowed_targets": []
+          },
+          "log_redaction": "default_secret_patterns",
+          "retention_class": "standard_30d",
+          "usage_correlation_id": "corr_fixture_echo_001",
+          "audit_correlation_id": "audit_corr_fixture_001",
+          "issued_at": "2026-06-01T21:00:00Z",
+          "not_before": "2026-06-01T21:00:00Z",
+          "expires_at": "2026-06-01T21:05:00Z",
+          "nonce": "nonce_fixture_001",
+          "key_id": "dispatch-key-fixture",
+          "signature": "fixture-signature-placeholder"
+        }
+      }
+    }
+  ],
+  "next_poll_after_ms": 1000
+}

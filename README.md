@@ -41,10 +41,21 @@ Key boundaries:
 
 ## Protocol Status
 
-Payloads are versioned with `protocol_version = "remote.v1alpha1"`. Transport is
-not final; the current implementation models an outbound persistent connection
-with HTTPS/WebSocket/gRPC-compatible JSON contracts so the control plane can
-align schema names before a concrete transport is selected.
+Payloads are versioned with `protocol_version = "remote.v1alpha1"`. The
+preferred transport is an outbound gRPC/protobuf control stream, with HTTPS
+polling and upload endpoints retained as the compatibility fallback. The current
+implementation keeps repo-local JSON schema snapshots and deterministic fixtures
+so the control plane can align schema names before generated shared contracts
+exist.
+
+Canonical alpha snapshots live under `schemas/`:
+
+- `schemas/runner-protocol.v1alpha1.json` lists the runner envelope, message
+  types, and signed dispatch instruction fields.
+- `schemas/https-fallback.v1alpha1.json` lists the fallback polling and event
+  batch request/response shape.
+- `schemas/runner-error-taxonomy.v1alpha1.json` lists the runner error category
+  snapshot used by compatibility tests.
 
 The initial fixture set lives under `fixtures/`:
 
@@ -53,8 +64,16 @@ The initial fixture set lives under `fixtures/`:
 - `fixtures/control-plane/job-dispatch-noop.json` models a no-op dispatch that
   preserves the side-effect-free runner bootstrap regression path.
 - `fixtures/control-plane/job-cancel.json` models the cancellation message shape.
+- `fixtures/runner/heartbeat-online.json`, `fixtures/runner/job-log-stdout.json`,
+  `fixtures/runner/job-artifacts.json`, `fixtures/runner/job-usage-succeeded.json`,
+  and `fixtures/runner/job-final-result-succeeded.json` model deterministic
+  runner evidence for heartbeat, logs, artifacts, usage, and final result.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
+- `fixtures/runner/job-error-policy-denied.json` models a non-retryable policy
+  denial error.
+- `fixtures/https-fallback/*.json` models poll and event-batch fallback
+  request/response payloads.
 - `fixtures/runner/noop-lifecycle-*.json` model deterministic no-op success,
   failure, cancellation, and timeout evidence envelopes for log, artifact,
   usage, and final-result reporting. Successful usage attempts report
@@ -111,12 +130,15 @@ terminal state and usage-attempt status fields.
 ## Compatibility Checks
 
 `contract-compatibility.json` declares the supported control-plane and runner
-protocol versions consumed by this repository. `cargo test
-protocol::tests::contract_compatibility_matrix_declares_supported_versions` and
-`cargo test protocol::tests::rejects_unsupported_control_plane_protocol_fixture`
-are the repo-local compatibility checks used by CI; they keep the supported
-`remote.v1alpha1` protocol explicit and fail when an unsupported protocol fixture
-is accepted.
+protocol versions, schema snapshots, HTTPS fallback schema version, and fixture
+paths consumed by this repository. `cargo test protocol::tests` is the
+repo-local compatibility check used by CI; it keeps `remote.v1alpha1`,
+`remote_usage_report.v1`, and `remote_https_fallback.v1alpha1` explicit and
+fails when an unsupported protocol fixture is accepted.
+
+Control-plane follow-up: `taskotter/taskotter` still needs to promote these
+repo-local schema snapshots into the canonical generated contract source and add
+consumer-side validators against the same fixture paths.
 
 ## MVP Limitations
 

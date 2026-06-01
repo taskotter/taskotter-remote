@@ -1,0 +1,81 @@
+{
+  "schema_name": "taskotter.remote.runner_protocol",
+  "protocol_version": "remote.v1alpha1",
+  "status": "alpha_fixture_contract",
+  "preferred_transport": "grpc_control_stream",
+  "fallback_transport": "https_polling_and_upload",
+  "message_types": {
+    "control_plane_to_runner": [
+      "job.dispatch",
+      "job.cancel"
+    ],
+    "runner_to_control_plane": [
+      "runner.heartbeat",
+      "job.lease.accepted",
+      "job.progress",
+      "job.log",
+      "job.artifacts",
+      "job.usage.report",
+      "job.final_result",
+      "job.error"
+    ]
+  },
+  "required_envelope_fields": [
+    "protocol_version",
+    "message_type",
+    "payload"
+  ],
+  "signed_dispatch_instruction": {
+    "required_fields": [
+      "instruction_id",
+      "job_id",
+      "lease_id",
+      "tenant_id",
+      "runner_id",
+      "capability_inventory_version",
+      "protocol_version",
+      "policy_decision_id",
+      "policy_version",
+      "allowed_adapter",
+      "execution_mode",
+      "timeout_seconds",
+      "max_concurrency_impact",
+      "input_refs",
+      "artifact_allowlist",
+      "credential_ref",
+      "credential_expires_at",
+      "credential_audience",
+      "network",
+      "log_redaction",
+      "retention_class",
+      "usage_correlation_id",
+      "audit_correlation_id",
+      "issued_at",
+      "not_before",
+      "expires_at",
+      "nonce",
+      "key_id",
+      "signature"
+    ],
+    "validation_summary": [
+      "reject_expired_or_not_yet_valid",
+      "reject_replayed_nonce",
+      "reject_wrong_runner",
+      "reject_wrong_capability_inventory_version",
+      "reject_unsupported_protocol_version",
+      "fail_closed_for_invalid_signature_or_policy"
+    ]
+  },
+  "fixtures": [
+    "fixtures/control-plane/job-dispatch-echo.json",
+    "fixtures/control-plane/job-dispatch-noop.json",
+    "fixtures/control-plane/job-cancel.json",
+    "fixtures/runner/heartbeat-online.json",
+    "fixtures/runner/job-log-stdout.json",
+    "fixtures/runner/job-artifacts.json",
+    "fixtures/runner/job-usage-succeeded.json",
+    "fixtures/runner/job-final-result-succeeded.json",
+    "fixtures/runner/job-error-timeout.json",
+    "fixtures/runner/job-error-policy-denied.json"
+  ]
+}
