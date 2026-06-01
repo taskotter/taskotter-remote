@@ -1,0 +1,16 @@
+{
+  "control_plane": {
+    "minimum_version": "0.1.0",
+    "recommended_version": "0.1.0"
+  },
+  "remote": {
+    "supported_protocol_versions": ["remote.v1alpha1"],
+    "usage_schema_versions": ["remote_usage_report.v1"],
+    "fixtures": [
+      "fixtures/control-plane/job-dispatch-echo.json",
+      "fixtures/control-plane/job-cancel.json",
+      "fixtures/runner/job-error-timeout.json"
+    ],
+    "unsupported_fixture": "fixtures/control-plane/job-dispatch-unsupported-protocol.json"
+  }
+}
