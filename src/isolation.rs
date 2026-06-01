@@ -1,4 +1,5 @@
-use crate::protocol::{ArtifactDescriptor, JobDispatch, LogChunk};
+use crate::protocol::{ArtifactDescriptor, JobDispatch, LogChunk, RunnerError};
+use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
@@ -135,6 +136,32 @@ pub fn redact_artifact_descriptor(mut descriptor: ArtifactDescriptor) -> Artifac
     descriptor
 }
 
+pub fn redact_runner_error(mut error: RunnerError) -> RunnerError {
+    let (message, _) = redact_secret_shaped_values(&error.message);
+    error.message = message;
+    error
+}
+
+pub fn redact_json_value(value: &mut Value) {
+    match value {
+        Value::String(raw) => {
+            let (redacted, _) = redact_secret_shaped_values(raw);
+            *raw = redacted;
+        }
+        Value::Array(items) => {
+            for item in items {
+                redact_json_value(item);
+            }
+        }
+        Value::Object(entries) => {
+            for item in entries.values_mut() {
+                redact_json_value(item);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) => {}
+    }
+}
+
 fn redact_secret_shaped_values(input: &str) -> (String, bool) {
     let mut output = String::with_capacity(input.len());
     let mut redacted = false;
@@ -198,7 +225,10 @@ fn is_secret_body_char(ch: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::protocol::{AdapterKind, ProtocolEnvelope};
+    use crate::protocol::{
+        AdapterExecutionMetadata, AdapterKind, ArtifactManifest, ErrorCategory, ProtocolEnvelope,
+    };
+    use serde_json::json;
 
     fn dispatch(job_id: &str, workspace_id: &str, credential_ref: Option<&str>) -> JobDispatch {
         let fixture = include_str!("../fixtures/control-plane/job-dispatch-echo.json");
@@ -415,6 +445,132 @@ mod tests {
             artifact_with_path_and_extension.path_label,
             "logs/job-redact/[REDACTED].stderr.log"
         );
+    }
+
+    #[test]
+    fn secret_redaction_corpus_covers_runner_diagnostic_surfaces() {
+        let corpus = [
+            "sk-fake00000000000000000001",
+            "tok_fake00000000000000000002",
+            "ghp_fake00000000000000000003",
+            "secret_fake000000000000000004",
+        ];
+        let bearer = corpus[0];
+        let session_cookie = corpus[1];
+        let private_key_fragment = corpus[2];
+        let credential_payload = corpus[3];
+
+        let log = redact_log_chunk(LogChunk {
+            job_id: "job_redaction_corpus".to_string(),
+            runner_id: "runner".to_string(),
+            sequence: 1,
+            stream: "stderr".to_string(),
+            redacted: false,
+            line: format!(
+                "denied egress to https://api.example.invalid/path?access_token={bearer}"
+            ),
+        });
+        let error = redact_runner_error(RunnerError {
+            job_id: Some("job_redaction_corpus".to_string()),
+            runner_id: "runner".to_string(),
+            category: ErrorCategory::PolicyDenied,
+            retryable: false,
+            message: format!("credential-use event rejected Bearer {bearer}"),
+        });
+        let artifact = ArtifactManifest {
+            job_id: "job_redaction_corpus".to_string(),
+            runner_id: "runner".to_string(),
+            artifacts: vec![redact_artifact_descriptor(ArtifactDescriptor {
+                path_label: format!("logs/{session_cookie}/credential-payload.json"),
+                content_type: "application/json".to_string(),
+                size_bytes: 128,
+                checksum_sha256: "fake-checksum-not-secret".to_string(),
+                retention_policy: "working_group_private".to_string(),
+            })],
+        };
+        let audit = AdapterExecutionMetadata {
+            adapter_id: "echo".to_string(),
+            adapter_kind: AdapterKind::Echo,
+            isolation_mode: "contract_only".to_string(),
+            network_mode: format!("deny_all attempted_url=https://blocked.invalid/{bearer}"),
+            scoped_credential_refs: vec![format!("runner-scoped-ref-{credential_payload}")],
+            audit_labels: vec![
+                "credential-use-denied".to_string(),
+                format!("private-key-fragment-{private_key_fragment}"),
+            ],
+        };
+        let mut model_context_candidate = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": format!(
+                        "debug denied egress with cookie={session_cookie} and payload={credential_payload}"
+                    )
+                }
+            ],
+            "tool_result": {
+                "url": format!("https://blocked.invalid/resource?token={bearer}"),
+                "private_key": format!("-----BEGIN PRIVATE KEY----- {private_key_fragment}")
+            },
+            "false_positive_controls": [
+                "taskotter-roadmap",
+                "runner-scoped-credential-ref",
+                "https://docs.example.invalid/public?query=tokenization"
+            ]
+        });
+        redact_json_value(&mut model_context_candidate);
+
+        let snapshots = [
+            ("log", serde_json::to_value(&log).unwrap()),
+            ("error", serde_json::to_value(&error).unwrap()),
+            ("artifact", serde_json::to_value(&artifact).unwrap()),
+            ("audit", {
+                let mut value = serde_json::to_value(&audit).unwrap();
+                redact_json_value(&mut value);
+                value
+            }),
+            ("model_context_candidate", model_context_candidate),
+        ];
+
+        assert!(log.redacted);
+        assert_eq!(
+            log.line,
+            "denied egress to https://api.example.invalid/path?access_token=[REDACTED]"
+        );
+        assert_eq!(
+            error.message,
+            "credential-use event rejected Bearer [REDACTED]"
+        );
+        assert_eq!(
+            snapshots[2].1["artifacts"][0]["path_label"],
+            "logs/[REDACTED]/credential-payload.json"
+        );
+        assert_eq!(
+            snapshots[3].1["network_mode"],
+            "deny_all attempted_url=https://blocked.invalid/[REDACTED]"
+        );
+        assert_eq!(
+            snapshots[4].1["false_positive_controls"],
+            json!([
+                "taskotter-roadmap",
+                "runner-scoped-credential-ref",
+                "https://docs.example.invalid/public?query=tokenization"
+            ])
+        );
+
+        for (surface, snapshot) in snapshots {
+            let rendered = serde_json::to_string_pretty(&snapshot).unwrap();
+            for secret in corpus {
+                assert!(
+                    !rendered.contains(secret),
+                    "{surface} leaked raw secret-like value {secret}: {rendered}"
+                );
+            }
+            assert!(
+                rendered.contains("[REDACTED]"),
+                "{surface} did not include redaction marker: {rendered}"
+            );
+        }
     }
 
     #[test]
