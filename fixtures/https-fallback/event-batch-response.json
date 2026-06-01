@@ -1,0 +1,12 @@
+{
+  "schema_version": "remote_https_fallback.v1alpha1",
+  "accepted": true,
+  "accepted_sequences": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "retry_after_ms": null
+}
