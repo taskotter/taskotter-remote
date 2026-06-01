@@ -1,0 +1,112 @@
+{
+  "schema_version": "remote_https_fallback.v1alpha1",
+  "runner_id": "local-dev-runner",
+  "idempotency_key": "idem_fixture_event_batch_001",
+  "first_sequence": 1,
+  "events": [
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "runner.heartbeat",
+      "payload": {
+        "runner_id": "local-dev-runner",
+        "capability_inventory_version": "cap_fixture_v1",
+        "daemon_version": "0.1.0",
+        "health": "online",
+        "active_job_ids": [
+          "job_fixture_echo_001"
+        ],
+        "available_concurrency": 1,
+        "clock_skew_ms": 12,
+        "resource_pressure": [],
+        "last_error_category": null
+      }
+    },
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "job.lease.accepted",
+      "payload": {
+        "lease_id": "lease_fixture_001",
+        "job_id": "job_fixture_echo_001",
+        "runner_id": "local-dev-runner",
+        "accepted": true,
+        "reason": null
+      }
+    },
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "job.log",
+      "payload": {
+        "job_id": "job_fixture_echo_001",
+        "runner_id": "local-dev-runner",
+        "sequence": 3,
+        "stream": "stdout",
+        "redacted": true,
+        "line": "hello from fixture"
+      }
+    },
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "job.usage.report",
+      "payload": {
+        "schema_version": "remote_usage_report.v1",
+        "job_id": "job_fixture_echo_001",
+        "runner_id": "local-dev-runner",
+        "request_id": null,
+        "correlation_id": "corr_fixture_echo_001",
+        "status": "succeeded",
+        "duration_ms": 14,
+        "cpu_time_ms": 4,
+        "peak_memory_bytes": 1048576,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "estimated_cost_micro_usd": 0
+      }
+    },
+    {
+      "protocol_version": "remote.v1alpha1",
+      "message_type": "job.final_result",
+      "payload": {
+        "job_id": "job_fixture_echo_001",
+        "runner_id": "local-dev-runner",
+        "phase": "completed",
+        "exit_code": 0,
+        "usage": {
+          "schema_version": "remote_usage_report.v1",
+          "job_id": "job_fixture_echo_001",
+          "runner_id": "local-dev-runner",
+          "request_id": null,
+          "correlation_id": "corr_fixture_echo_001",
+          "status": "succeeded",
+          "duration_ms": 14,
+          "cpu_time_ms": 4,
+          "peak_memory_bytes": 1048576,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "estimated_cost_micro_usd": 0
+        },
+        "artifacts": [
+          {
+            "path_label": "stdout.txt",
+            "content_type": "text/plain",
+            "size_bytes": 18,
+            "checksum_sha256": "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4",
+            "retention_policy": "standard_30d"
+          }
+        ],
+        "audit_metadata": {
+          "adapter_id": "echo",
+          "adapter_kind": "echo",
+          "isolation_mode": "temporary_workspace",
+          "network_mode": "deny_all",
+          "scoped_credential_refs": [
+            "runner-scoped-credential-ref"
+          ],
+          "audit_labels": [
+            "policy_fixture_v1",
+            "wg-dev"
+          ]
+        }
+      }
+    }
+  ]
+}
