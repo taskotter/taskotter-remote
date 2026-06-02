@@ -9,6 +9,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/contract-compatibility.yml"
+      - "scripts/check-contract-compatibility.sh"
   push:
     branches: ["main"]
     paths:
@@ -18,6 +19,7 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/contract-compatibility.yml"
+      - "scripts/check-contract-compatibility.sh"
 
 permissions:
   contents: read
@@ -28,8 +30,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test protocol::tests::contract_compatibility_matrix_declares_supported_versions
-      - run: cargo test protocol::tests::rejects_unsupported_control_plane_protocol_fixture
-      - run: cargo test
+      - run: scripts/check-contract-compatibility.sh

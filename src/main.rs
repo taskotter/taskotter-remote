@@ -1,7 +1,11 @@
 use anyhow::Context;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use taskotter_remote::{
-    capabilities::RunnerCapabilities, config::RemoteConfig, daemon::RunnerDaemon,
+    capabilities::RunnerCapabilities,
+    config::RemoteConfig,
+    daemon::RunnerDaemon,
+    diagnostics::{DiagnosticsOptions, operator_diagnostics},
+    protocol::RunnerHealth,
 };
 
 #[derive(Debug, Parser)]
@@ -29,6 +33,36 @@ enum Command {
         #[arg(short, long, default_value = "examples/remote.toml")]
         config: String,
     },
+    /// Print redacted local operator diagnostics as versioned JSON.
+    Diagnostics {
+        #[arg(short, long, default_value = "examples/remote.toml")]
+        config: String,
+        #[arg(long, value_enum, default_value_t = DiagnosticHealth::Online)]
+        health: DiagnosticHealth,
+        #[arg(long)]
+        quarantine_reason: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, ValueEnum)]
+enum DiagnosticHealth {
+    Online,
+    Degraded,
+    Draining,
+    Offline,
+    Quarantined,
+}
+
+impl From<DiagnosticHealth> for RunnerHealth {
+    fn from(value: DiagnosticHealth) -> Self {
+        match value {
+            DiagnosticHealth::Online => Self::Online,
+            DiagnosticHealth::Degraded => Self::Degraded,
+            DiagnosticHealth::Draining => Self::Draining,
+            DiagnosticHealth::Offline => Self::Offline,
+            DiagnosticHealth::Quarantined => Self::Quarantined,
+        }
+    }
 }
 
 #[tokio::main]
@@ -57,6 +91,22 @@ async fn main() -> anyhow::Result<()> {
             for envelope in daemon.run_once().await? {
                 println!("{}", serde_json::to_string_pretty(&envelope)?);
             }
+        }
+        Command::Diagnostics {
+            config,
+            health,
+            quarantine_reason,
+        } => {
+            let config = load_config(config)?;
+            let diagnostics = operator_diagnostics(
+                &config,
+                DiagnosticsOptions {
+                    health: health.into(),
+                    quarantine_reason,
+                    ..DiagnosticsOptions::default()
+                },
+            );
+            println!("{}", serde_json::to_string_pretty(&diagnostics)?);
         }
     }
 

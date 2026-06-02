@@ -1,0 +1,93 @@
+[
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.log",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "sequence": 1,
+      "stream": "stdout",
+      "redacted": false,
+      "line": "noop adapter completed without side effects"
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.artifacts",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "artifacts": [
+        {
+          "path_label": "stdout.txt",
+          "content_type": "text/plain",
+          "size_bytes": 43,
+          "checksum_sha256": "08d9d37a1d9dbc2108aad0cecc04503b2a6bbd699a266f151f928988af025d5f",
+          "retention_policy": "working_group_private"
+        }
+      ]
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.usage.report",
+    "payload": {
+      "schema_version": "remote_usage_report.v1",
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "request_id": null,
+      "correlation_id": "corr_fixture_noop_001",
+      "status": "succeeded",
+      "duration_ms": 0,
+      "cpu_time_ms": null,
+      "peak_memory_bytes": null,
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "estimated_cost_micro_usd": 0
+    }
+  },
+  {
+    "protocol_version": "remote.v1alpha1",
+    "message_type": "job.final_result",
+    "payload": {
+      "job_id": "job_fixture_noop_001",
+      "runner_id": "local-dev-runner",
+      "phase": "completed",
+      "exit_code": 0,
+      "usage": {
+        "schema_version": "remote_usage_report.v1",
+        "job_id": "job_fixture_noop_001",
+        "runner_id": "local-dev-runner",
+        "request_id": null,
+        "correlation_id": "corr_fixture_noop_001",
+        "status": "succeeded",
+        "duration_ms": 0,
+        "cpu_time_ms": null,
+        "peak_memory_bytes": null,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "estimated_cost_micro_usd": 0
+      },
+      "artifacts": [
+        {
+          "path_label": "stdout.txt",
+          "content_type": "text/plain",
+          "size_bytes": 43,
+          "checksum_sha256": "08d9d37a1d9dbc2108aad0cecc04503b2a6bbd699a266f151f928988af025d5f",
+          "retention_policy": "working_group_private"
+        }
+      ],
+      "audit_metadata": {
+        "adapter_id": "noop",
+        "adapter_kind": "noop",
+        "isolation_mode": "temporary_isolated",
+        "network_mode": "deny_all",
+        "scoped_credential_refs": [],
+        "audit_labels": [
+          "policy_fixture_v1",
+          "wg-dev"
+        ]
+      }
+    }
+  }
+]

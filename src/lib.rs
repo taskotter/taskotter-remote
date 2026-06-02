@@ -2,6 +2,8 @@ pub mod adapters;
 pub mod capabilities;
 pub mod config;
 pub mod daemon;
+pub mod diagnostics;
+pub mod dispatch_auth;
 pub mod gates;
 pub mod isolation;
 pub mod job;

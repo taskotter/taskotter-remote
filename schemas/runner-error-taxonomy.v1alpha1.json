@@ -1,0 +1,52 @@
+{
+  "schema_name": "taskotter.remote.runner_error_taxonomy",
+  "protocol_version": "remote.v1alpha1",
+  "status": "alpha_fixture_contract",
+  "categories": [
+    {
+      "name": "policy_denied",
+      "retryable_default": false,
+      "description": "Control-plane or signed dispatch policy refused execution before adapter start."
+    },
+    {
+      "name": "capability_mismatch",
+      "retryable_default": false,
+      "description": "Dispatch required a capability not advertised by the runner inventory version."
+    },
+    {
+      "name": "workspace_setup",
+      "retryable_default": true,
+      "description": "Runner could not create or prepare the scoped job workspace."
+    },
+    {
+      "name": "adapter_failed",
+      "retryable_default": false,
+      "description": "The selected adapter returned a terminal failure."
+    },
+    {
+      "name": "timeout",
+      "retryable_default": true,
+      "description": "The job exceeded its dispatch or adapter timeout."
+    },
+    {
+      "name": "cancelled",
+      "retryable_default": false,
+      "description": "Cancellation was requested by the control plane or operator."
+    },
+    {
+      "name": "artifact_upload",
+      "retryable_default": true,
+      "description": "Artifact manifest or upload failed after adapter execution."
+    },
+    {
+      "name": "usage_report",
+      "retryable_default": true,
+      "description": "Usage report emission failed or was rejected."
+    },
+    {
+      "name": "internal",
+      "retryable_default": true,
+      "description": "Runner hit an unexpected internal error."
+    }
+  ]
+}
