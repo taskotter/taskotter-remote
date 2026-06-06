@@ -80,6 +80,9 @@ The initial fixture set lives under `fixtures/`:
   runner evidence for heartbeat, logs, artifacts, usage, and final result.
 - `fixtures/runner/job-error-timeout.json` models the timeout error taxonomy
   shape reported by the runner.
+- `fixtures/runner/credential-lifecycle-simulator.json` models deterministic
+  runner registration token, runner state, credential expiry, disable, drain,
+  shared, quarantine, and rotation coverage without storing secret values.
 - `fixtures/runner/job-error-policy-denied.json` models a non-retryable policy
   denial error.
 - `fixtures/https-fallback/*.json` models poll and event-batch fallback

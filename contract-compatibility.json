@@ -25,6 +25,7 @@
       "fixtures/runner/job-final-result-succeeded.json",
       "fixtures/runner/job-error-timeout.json",
       "fixtures/runner/job-error-policy-denied.json",
+      "fixtures/runner/credential-lifecycle-simulator.json",
       "fixtures/https-fallback/poll-request.json",
       "fixtures/https-fallback/poll-response-dispatch.json",
       "fixtures/https-fallback/event-batch-request.json",
